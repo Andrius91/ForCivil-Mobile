@@ -1,0 +1,39 @@
+# Flutter
+.buildlog/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android
+**/build/
+**/.gradle/
+**/.idea/
+local.properties
+.gradle/
+.idea/
+*.iml
+
+# iOS
+**/DerivedData/
+**/Pods/
+**/.symlinks/
+**/Flutter/Flutter.framework
+**/Flutter/App.framework
+**/Flutter/Flutter.podspec
+
+# Misc
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+.DS_Store
+
+# Android SDK / NDK (no se versiona)
+Android/
+android/
