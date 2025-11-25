@@ -1,20 +1,59 @@
 import 'package:ff_theme/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
-import '/flutter_flow/flutter_flow_util.dart';
+import '/backend/api/auth_state.dart';
+import '/backend/api/auth_service.dart';
+import '/backend/api/crew_service.dart';
 import '/widgets/for_civil_layout.dart';
 
-class MyCrewWidget extends StatelessWidget {
+class MyCrewWidget extends StatefulWidget {
   const MyCrewWidget({super.key});
 
   static String routeName = 'MyCrew';
   static String routePath = '/myCrew';
 
   @override
+  State<MyCrewWidget> createState() => _MyCrewWidgetState();
+}
+
+class _MyCrewWidgetState extends State<MyCrewWidget> {
+  final _crewService = CrewService();
+  late Future<List<Crew>> _crewFuture;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _crewFuture = _loadCrews();
+      _initialized = true;
+    }
+  }
+
+  Future<List<Crew>> _loadCrews() async {
+    final authState = context.read<AuthState>();
+    final token = authState.token;
+    final profile = authState.profile;
+
+    if (token == null || profile == null) {
+      throw ApiException('Debes iniciar sesión para ver tus cuadrillas');
+    }
+
+    return _crewService.fetchCrews(userId: profile.id, token: token);
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _crewFuture = _loadCrews();
+    });
+    await _crewFuture;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
-    final teams = _buildTeams();
 
     return ForCivilLayout(
       scaffoldKey: GlobalKey<ScaffoldState>(),
@@ -35,7 +74,7 @@ class MyCrewWidget extends StatelessWidget {
               ),
             ),
             Text(
-              'Selecciona una cuadrilla para ver a sus integrantes, categoría y fecha de ingreso.',
+              'Selecciona una cuadrilla para ver a sus integrantes, capataz y partidas asignadas.',
               style: theme.bodyMedium.override(
                 font: GoogleFonts.inter(),
                 color: theme.mutedforeground,
@@ -43,11 +82,34 @@ class MyCrewWidget extends StatelessWidget {
             ),
             const SizedBox(height: 24.0),
             Expanded(
-              child: ListView.separated(
-                itemCount: teams.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 16.0),
-                itemBuilder: (context, index) =>
-                    _CrewTeamTile(team: teams[index]),
+              child: RefreshIndicator(
+                color: theme.primarycolor,
+                onRefresh: _refresh,
+                child: FutureBuilder<List<Crew>>(
+                  future: _crewFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const _CrewLoadingList();
+                    }
+                    if (snapshot.hasError) {
+                      return _CrewErrorState(
+                        error: snapshot.error,
+                        onRetry: _refresh,
+                      );
+                    }
+                    final crews = snapshot.data ?? const [];
+                    if (crews.isEmpty) {
+                      return const _CrewEmptyState();
+                    }
+                    return ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: crews.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16.0),
+                      itemBuilder: (context, index) =>
+                          _CrewTeamTile(crew: crews[index]),
+                    );
+                  },
+                ),
               ),
             ),
           ],
@@ -55,83 +117,12 @@ class MyCrewWidget extends StatelessWidget {
       ),
     );
   }
-
-  List<_CrewTeam> _buildTeams() {
-    return [
-      _CrewTeam(
-        name: 'Cuadrilla Estructuras',
-        label: 'Obra gruesa',
-        members: [
-          _CrewMember(
-            name: 'Javier Camacho',
-            category: 'Oficial',
-            startDate: DateTime(2021, 3, 12),
-            photoUrl: 'https://i.pravatar.cc/150?img=8',
-          ),
-          _CrewMember(
-            name: 'María Torres',
-            category: 'Oficial',
-            startDate: DateTime(2020, 11, 2),
-            photoUrl: 'https://i.pravatar.cc/150?img=45',
-          ),
-          _CrewMember(
-            name: 'Luis Hidalgo',
-            category: 'Ayudante',
-            startDate: DateTime(2023, 1, 19),
-            photoUrl: 'https://i.pravatar.cc/150?img=12',
-          ),
-        ],
-      ),
-      _CrewTeam(
-        name: 'Cuadrilla Acabados',
-        label: 'Terminaciones',
-        members: [
-          _CrewMember(
-            name: 'Rosa Alvarado',
-            category: 'Operaria',
-            startDate: DateTime(2022, 7, 4),
-            photoUrl: 'https://i.pravatar.cc/150?img=32',
-          ),
-          _CrewMember(
-            name: 'Carlos Benites',
-            category: 'Operario',
-            startDate: DateTime(2019, 9, 15),
-            photoUrl: 'https://i.pravatar.cc/150?img=28',
-          ),
-          _CrewMember(
-            name: 'Lucía Romero',
-            category: 'Ayudante',
-            startDate: DateTime(2023, 5, 9),
-            photoUrl: 'https://i.pravatar.cc/150?img=5',
-          ),
-        ],
-      ),
-      _CrewTeam(
-        name: 'Cuadrilla Instalaciones',
-        label: 'Redes y servicios',
-        members: [
-          _CrewMember(
-            name: 'Pedro Gutierrez',
-            category: 'Oficial',
-            startDate: DateTime(2021, 9, 7),
-            photoUrl: 'https://i.pravatar.cc/150?img=21',
-          ),
-          _CrewMember(
-            name: 'Ana Salazar',
-            category: 'Operaria',
-            startDate: DateTime(2022, 2, 18),
-            photoUrl: 'https://i.pravatar.cc/150?img=16',
-          ),
-        ],
-      ),
-    ];
-  }
 }
 
 class _CrewTeamTile extends StatefulWidget {
-  const _CrewTeamTile({required this.team});
+  const _CrewTeamTile({required this.crew});
 
-  final _CrewTeam team;
+  final Crew crew;
 
   @override
   State<_CrewTeamTile> createState() => _CrewTeamTileState();
@@ -143,6 +134,7 @@ class _CrewTeamTileState extends State<_CrewTeamTile> {
   @override
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
+    final crew = widget.crew;
     return Container(
       decoration: BoxDecoration(
         color: theme.card,
@@ -169,7 +161,7 @@ class _CrewTeamTileState extends State<_CrewTeamTile> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.team.name,
+                crew.name,
                 style: theme.titleMedium.override(
                   font: GoogleFonts.interTight(
                     fontWeight: FontWeight.w600,
@@ -178,30 +170,62 @@ class _CrewTeamTileState extends State<_CrewTeamTile> {
                 ),
               ),
               const SizedBox(height: 4.0),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                decoration: BoxDecoration(
-                  color: theme.secondaryBackground,
-                  borderRadius: BorderRadius.circular(20.0),
-                  border: Border.all(color: theme.border),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Capataz: ${crew.foremanName}',
+                      style: theme.bodyMedium.override(
+                        font: GoogleFonts.inter(),
+                        color: theme.mutedforeground,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0, vertical: 6.0),
+                    decoration: BoxDecoration(
+                      color: theme.secondaryBackground,
+                      borderRadius: BorderRadius.circular(20.0),
+                      border: Border.all(color: theme.border),
+                    ),
+                    child: Text(
+                      crew.active ? 'Activa' : 'Inactiva',
+                      style: theme.labelMedium.override(
+                        font: GoogleFonts.inter(),
+                        color: crew.active ? theme.success : theme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          children: [
+            if (crew.partidas.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 16.0),
+                child: _PartidasChips(partidas: crew.partidas),
+              ),
+            if (crew.members.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 16.0),
                 child: Text(
-                  widget.team.label,
-                  style: theme.labelMedium.override(
+                  'Esta cuadrilla aún no tiene integrantes registrados.',
+                  style: theme.bodyMedium.override(
                     font: GoogleFonts.inter(),
                     color: theme.mutedforeground,
                   ),
                 ),
+              )
+            else
+              ...crew.members.map(
+                (member) => Padding(
+                  padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 12.0),
+                  child: _CrewCard(member: member),
+                ),
               ),
-            ],
-          ),
-          children: widget.team.members
-              .map((member) => Padding(
-                    padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 12.0),
-                    child: _CrewCard(member: member),
-                  ))
-              .toList(),
+          ],
         ),
       ),
     );
@@ -211,12 +235,14 @@ class _CrewTeamTileState extends State<_CrewTeamTile> {
 class _CrewCard extends StatelessWidget {
   const _CrewCard({required this.member});
 
-  final _CrewMember member;
+  final CrewMember member;
 
   @override
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
-    final dateLabel = dateTimeFormat('d MMM y', member.startDate, locale: 'es');
+    final initials = member.fullName.isNotEmpty
+        ? member.fullName.trim().split(' ').take(2).map((e) => e[0]).join()
+        : 'C';
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -228,8 +254,12 @@ class _CrewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CircleAvatar(
-            backgroundImage: NetworkImage(member.photoUrl),
+            backgroundImage:
+                member.photoUrl != null ? NetworkImage(member.photoUrl!) : null,
             radius: 28,
+            child: member.photoUrl == null
+                ? Text(initials, style: theme.titleMedium)
+                : null,
           ),
           const SizedBox(width: 16.0),
           Expanded(
@@ -237,7 +267,7 @@ class _CrewCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  member.name,
+                  member.fullName,
                   style: theme.titleMedium.override(
                     font: GoogleFonts.interTight(
                       fontWeight: FontWeight.w600,
@@ -247,7 +277,9 @@ class _CrewCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4.0),
                 Text(
-                  member.category,
+                  member.specialty.isNotEmpty
+                      ? '${member.category} · ${member.specialty}'
+                      : member.category,
                   style: theme.bodyMedium.override(
                     font: GoogleFonts.inter(),
                     color: theme.mutedforeground,
@@ -260,14 +292,14 @@ class _CrewCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'Ingreso',
+                'Código',
                 style: theme.labelMedium.override(
                   font: GoogleFonts.inter(),
                   color: theme.mutedforeground,
                 ),
               ),
               Text(
-                dateLabel,
+                member.id.toString(),
                 style: theme.bodyMedium,
               ),
             ],
@@ -278,24 +310,192 @@ class _CrewCard extends StatelessWidget {
   }
 }
 
-class _CrewTeam {
-  _CrewTeam({required this.name, required this.label, required this.members});
+class _PartidasChips extends StatelessWidget {
+  const _PartidasChips({required this.partidas});
 
-  final String name;
-  final String label;
-  final List<_CrewMember> members;
+  final List<CrewPartida> partidas;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Partidas asignadas',
+          style: theme.labelLarge.override(
+            font: GoogleFonts.interTight(
+              fontWeight: FontWeight.w600,
+              fontStyle: theme.labelLarge.fontStyle,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8.0),
+        Wrap(
+          spacing: 8.0,
+          runSpacing: 8.0,
+          children: partidas
+              .map(
+                (partida) => Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0, vertical: 8.0),
+                  decoration: BoxDecoration(
+                    color: theme.secondaryBackground,
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: Border.all(color: theme.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        partida.code,
+                        style: theme.labelMedium.override(
+                          font: GoogleFonts.inter(),
+                          color: theme.mutedforeground,
+                        ),
+                      ),
+                      const SizedBox(height: 4.0),
+                      Text(
+                        partida.name,
+                        style: theme.bodyMedium,
+                      ),
+                      if (partida.unit != null || partida.metric != null)
+                        Text(
+                          '${partida.metric?.toString() ?? '-'} ${partida.unit ?? ''}'.trim(),
+                          style: theme.bodySmall.override(
+                            font: GoogleFonts.inter(),
+                            color: theme.mutedforeground,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
 }
 
-class _CrewMember {
-  _CrewMember({
-    required this.name,
-    required this.category,
-    required this.startDate,
-    required this.photoUrl,
-  });
+class _CrewLoadingList extends StatelessWidget {
+  const _CrewLoadingList();
 
-  final String name;
-  final String category;
-  final DateTime startDate;
-  final String photoUrl;
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: 3,
+      separatorBuilder: (_, __) => const SizedBox(height: 16.0),
+      itemBuilder: (context, index) => Container(
+        height: 110,
+        decoration: BoxDecoration(
+          color: theme.secondaryBackground,
+          borderRadius: BorderRadius.circular(18.0),
+          border: Border.all(color: theme.border),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+}
+
+class _CrewErrorState extends StatelessWidget {
+  const _CrewErrorState({required this.error, required this.onRetry});
+
+  final Object? error;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final message = error is ApiException
+        ? (error as ApiException).message
+        : 'No pudimos cargar tus cuadrillas. Inténtalo nuevamente.';
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 32.0),
+          padding: const EdgeInsets.all(20.0),
+          decoration: BoxDecoration(
+            color: theme.error.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(18.0),
+            border: Border.all(color: theme.error),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Error al cargar cuadrillas',
+                style: theme.titleMedium.override(
+                  font: GoogleFonts.interTight(
+                    fontWeight: FontWeight.w600,
+                    fontStyle: theme.titleMedium.fontStyle,
+                  ),
+                  color: theme.error,
+                ),
+              ),
+              const SizedBox(height: 8.0),
+              Text(message, style: theme.bodyMedium),
+              const SizedBox(height: 16.0),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CrewEmptyState extends StatelessWidget {
+  const _CrewEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 32.0),
+          padding: const EdgeInsets.all(24.0),
+          decoration: BoxDecoration(
+            color: theme.card,
+            borderRadius: BorderRadius.circular(18.0),
+            border: Border.all(color: theme.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Sin cuadrillas disponibles',
+                style: theme.titleMedium.override(
+                  font: GoogleFonts.interTight(
+                    fontWeight: FontWeight.w600,
+                    fontStyle: theme.titleMedium.fontStyle,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8.0),
+              Text(
+                'Aún no se te han asignado cuadrillas. Vuelve a intentarlo más tarde o consulta con tu administrador.',
+                style: theme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
