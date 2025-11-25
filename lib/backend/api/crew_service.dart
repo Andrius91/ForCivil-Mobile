@@ -27,12 +27,14 @@ class CrewService {
 
   Future<List<Crew>> fetchCrews({
     required int userId,
+    required int projectId,
     required String token,
   }) async {
     final response = await _client.get(
       _uri('/crews/by-user', {'userId': userId}),
       headers: {
         'Authorization': 'Bearer $token',
+        'X-Project-Id': projectId.toString(),
       },
     );
 

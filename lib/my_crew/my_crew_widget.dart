@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '/backend/api/auth_state.dart';
 import '/backend/api/auth_service.dart';
+import '/backend/api/auth_state.dart';
 import '/backend/api/crew_service.dart';
 import '/widgets/for_civil_layout.dart';
 
@@ -36,12 +36,21 @@ class _MyCrewWidgetState extends State<MyCrewWidget> {
     final authState = context.read<AuthState>();
     final token = authState.token;
     final profile = authState.profile;
+    final project = authState.selectedProject;
 
     if (token == null || profile == null) {
       throw ApiException('Debes iniciar sesión para ver tus cuadrillas');
     }
+    if (project == null) {
+      throw ApiException(
+          'Selecciona un proyecto antes de consultar tus cuadrillas');
+    }
 
-    return _crewService.fetchCrews(userId: profile.id, token: token);
+    return _crewService.fetchCrews(
+      userId: profile.id,
+      projectId: project.projectId,
+      token: token,
+    );
   }
 
   Future<void> _refresh() async {
