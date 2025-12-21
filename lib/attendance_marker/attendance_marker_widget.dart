@@ -67,6 +67,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     });
     try {
       final authState = context.read<AuthState>();
+      await authState.ensureValidToken();
       final token = authState.token;
       final profile = authState.profile;
       final project = authState.selectedProject;
@@ -161,8 +162,14 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
 
     final timestamp = DateTime.now();
     try {
+      await authState.ensureValidToken();
+      final freshToken = authState.token;
+      if (freshToken == null) {
+        _showMessage('Debes iniciar sesión nuevamente.');
+        return false;
+      }
       await _attendanceService.registerAttendance(
-        token: token,
+        token: freshToken,
         projectId: project.projectId,
         crewId: crew.id,
         dni: dni,
@@ -171,7 +178,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       );
 
       final records = await _attendanceService.fetchCrewAttendance(
-        token: token,
+        token: freshToken,
         crewId: crew.id,
         date: timestamp,
       );

@@ -29,6 +29,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   late Future<_RegisterData> _dataFuture;
   int? _selectedCrewId;
   DateTime _selectedDate = DateTime.now();
+  final Map<int, List<PlanPhase>> _filteredCache = {};
 
   @override
   void didChangeDependencies() {
@@ -41,6 +42,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
   Future<_RegisterData> _loadData() async {
     final authState = context.read<AuthState>();
+    await authState.ensureValidToken();
     final token = authState.token;
     final profile = authState.profile;
     final project = authState.selectedProject;
@@ -68,6 +70,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
   Future<void> _reload() async {
     setState(() {
+      _filteredCache.clear();
       _dataFuture = _loadData();
     });
     await _dataFuture;
@@ -272,7 +275,8 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
                   final crew = selectedCrew!;
                   final filteredPhases =
-                      _filterPhasesForCrew(data.phases, crew);
+                      _filteredCache[crew.id] ??=
+                          _filterPhasesForCrew(data.phases, crew);
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
@@ -745,6 +749,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
 
   Future<void> _save() async {
     final authState = context.read<AuthState>();
+    await authState.ensureValidToken();
     final token = authState.token;
     final project = authState.selectedProject;
 

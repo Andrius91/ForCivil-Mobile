@@ -164,6 +164,29 @@ class AuthService {
     return LoginResponseData.fromJson(body['data'] as Map<String, dynamic>);
   }
 
+  Future<LoginResponseData> refreshToken(String refreshToken) async {
+    final response = await _client.post(
+      _uri('/auth/refresh'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+
+    final body = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+    if (response.statusCode != 200) {
+      final message = body is Map<String, dynamic> ? body['message'] : null;
+      throw ApiException(
+        message?.toString() ?? 'No se pudo refrescar la sesión',
+        statusCode: response.statusCode,
+      );
+    }
+    if (body is! Map<String, dynamic> || body['success'] != true) {
+      throw ApiException(body?['message']?.toString() ?? 'Respuesta inválida');
+    }
+    return LoginResponseData.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   Future<UserProfile> fetchCurrentUser(String token) async {
     final response = await _client.get(
       _uri('/users/me'),

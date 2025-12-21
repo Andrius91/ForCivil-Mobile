@@ -34,6 +34,7 @@ class _MyCrewWidgetState extends State<MyCrewWidget> {
 
   Future<List<Crew>> _loadCrews() async {
     final authState = context.read<AuthState>();
+    await authState.ensureValidToken();
     final token = authState.token;
     final profile = authState.profile;
     final project = authState.selectedProject;
