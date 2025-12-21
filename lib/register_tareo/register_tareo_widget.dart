@@ -644,6 +644,43 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                       if (_attendanceLoading || _attendanceError != null)
                         const SizedBox(height: 12.0),
                       Expanded(child: phasePanel),
+                      SafeArea(
+                        top: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (crewPending.isNotEmpty)
+                              Text(
+                                '${crewPending.length} partidas con horas en borrador',
+                                style: theme.bodySmall.override(
+                                  font: GoogleFonts.inter(),
+                                  color: theme.mutedforeground,
+                                ),
+                              )
+                            else
+                              Text(
+                                'Guarda horas en una partida para habilitar el envío.',
+                                style: theme.bodySmall.override(
+                                  font: GoogleFonts.inter(),
+                                  color: theme.mutedforeground,
+                                ),
+                              ),
+                            const SizedBox(height: 8.0),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: crewPending.isEmpty
+                                    ? null
+                                    : () => _showPendingDetail(crew),
+                                icon: const Icon(Icons.send),
+                                label: Text(crewPending.isEmpty
+                                    ? 'Enviar tareo'
+                                    : 'Enviar tareo (${crewPending.length})'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   );
                 },
