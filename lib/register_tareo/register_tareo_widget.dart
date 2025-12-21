@@ -1000,6 +1000,70 @@ class _AssignmentLine {
   final double hoursExtra;
 }
 
+class _HoursStepper extends StatelessWidget {
+  const _HoursStepper({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(12.0),
+        border: Border.all(color: theme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.labelLarge,
+          ),
+          const SizedBox(height: 8.0),
+          Row(
+            children: [
+              IconButton(
+                onPressed: enabled
+                    ? () => onChanged(_decrement(value))
+                    : null,
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    value.toStringAsFixed(value % 1 == 0 ? 0 : 1),
+                    style: theme.headlineSmall,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: enabled
+                    ? () => onChanged(_increment(value))
+                    : null,
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _increment(double current) => (current + 0.5).clamp(0, 24);
+  double _decrement(double current) => (current - 0.5).clamp(0, 24);
+}
+
 class _RegisterError extends StatelessWidget {
   const _RegisterError({
     required this.message,
@@ -1056,46 +1120,30 @@ class CrewAssignmentPage extends StatefulWidget {
 }
 
 class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
-  late final Map<int, TextEditingController> _normalControllers;
-  late final Map<int, TextEditingController> _extraControllers;
+  final Map<int, double> _normalHours = {};
+  final Map<int, double> _extraHours = {};
   bool _submitting = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _normalControllers = {
-      for (final member in widget.crew.members)
-        member.id: TextEditingController(),
-    };
-    _extraControllers = {
-      for (final member in widget.crew.members)
-        member.id: TextEditingController(),
-    };
+    for (final member in widget.crew.members) {
+      _normalHours[member.id] = 0;
+      _extraHours[member.id] = 0;
+    }
   }
 
   @override
   void dispose() {
-    for (final controller in _normalControllers.values) {
-      controller.dispose();
-    }
-    for (final controller in _extraControllers.values) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
   Future<void> _save() async {
     final entries = <_AssignmentLine>[];
     for (final member in widget.crew.members) {
-      final regular = double.tryParse(
-            _normalControllers[member.id]?.text.replaceAll(',', '.') ?? '',
-          ) ??
-          0;
-      final extra = double.tryParse(
-            _extraControllers[member.id]?.text.replaceAll(',', '.') ?? '',
-          ) ??
-          0;
+      final regular = _normalHours[member.id] ?? 0;
+      final extra = _extraHours[member.id] ?? 0;
       if (regular <= 0 && extra <= 0) {
         continue;
       }
@@ -1119,11 +1167,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
       return;
     }
 
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-
+    setState(() => _error = null);
     Navigator.of(context).pop(_AssignmentResult(lines: entries));
   }
 
@@ -1265,26 +1309,24 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
-                                  controller: _normalControllers[member.id],
+                                child: _HoursStepper(
+                                  label: 'Horas normales',
+                                  value: _normalHours[member.id] ?? 0,
                                   enabled: !_submitting,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
-                                  decoration: _hoursDecoration(
-                                      context, 'Horas normales'),
+                                  onChanged: (value) => setState(() {
+                                    _normalHours[member.id] = value;
+                                  }),
                                 ),
                               ),
                               const SizedBox(width: 12.0),
                               Expanded(
-                                child: TextField(
-                                  controller: _extraControllers[member.id],
+                                child: _HoursStepper(
+                                  label: 'Horas extra',
+                                  value: _extraHours[member.id] ?? 0,
                                   enabled: !_submitting,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
-                                  decoration:
-                                      _hoursDecoration(context, 'Horas extra'),
+                                  onChanged: (value) => setState(() {
+                                    _extraHours[member.id] = value;
+                                  }),
                                 ),
                               ),
                             ],
@@ -1323,28 +1365,6 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
     );
   }
 
-  InputDecoration _hoursDecoration(BuildContext context, String label) {
-    final theme = FlutterFlowTheme.of(context);
-    return InputDecoration(
-      labelText: label,
-      hintText: '0',
-      filled: true,
-      fillColor: theme.secondaryBackground,
-      labelStyle: TextStyle(color: theme.mutedforeground),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: theme.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: theme.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: theme.primarycolor),
-      ),
-    );
-  }
 }
 
 class _RegisterData {
