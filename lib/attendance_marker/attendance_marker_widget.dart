@@ -39,7 +39,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   String? _loadError;
   Crew? _selectedCrew;
   List<AttendanceRecord> _records = [];
-  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -62,6 +61,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   }
 
   Future<void> _loadCrewAndRecords() async {
+    final currentDate = DateTime.now();
     setState(() {
       _isLoadingData = true;
       _loadError = null;
@@ -93,7 +93,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         token: token,
         projectId: project.projectId,
         crewId: crew.id,
-        date: _selectedDate,
+        date: currentDate,
       );
 
       if (!mounted) return;
@@ -123,20 +123,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      locale: const Locale('es'),
-    );
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-      await _loadCrewAndRecords();
-    }
   }
 
   Future<void> _startScan(String mode) async {
@@ -279,8 +265,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     return [
       _buildDateCard(theme, dateString, timeString, fullName),
       const SizedBox(height: 16.0),
-      _buildDateSelector(theme),
-      const SizedBox(height: 16.0),
       _buildActionButtons(theme),
       if (_message != null) ...[
         const SizedBox(height: 12.0),
@@ -343,28 +327,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDateSelector(FlutterFlowTheme theme) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(color: theme.border),
-      ),
-      child: ListTile(
-        leading: const Icon(Icons.calendar_today),
-        title: const Text('Fecha de marcación'),
-        subtitle: Text(
-          dateTimeFormat('EEEE d MMMM y', _selectedDate, locale: 'es'),
-        ),
-        trailing: TextButton(
-          onPressed: _pickDate,
-          child: const Text('Cambiar'),
-        ),
       ),
     );
   }
