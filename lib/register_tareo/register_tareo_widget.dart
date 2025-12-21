@@ -24,12 +24,16 @@ class RegisterTareoWidget extends StatefulWidget {
 class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   final _planService = PlanService();
   final _crewService = CrewService();
+  final _timesheetService = TimesheetService();
 
   bool _initialized = false;
   late Future<_RegisterData> _dataFuture;
   int? _selectedCrewId;
   DateTime _selectedDate = DateTime.now();
   final Map<int, List<PlanPhase>> _filteredCache = {};
+  final Map<int, List<_PendingEntry>> _pendingEntries = {};
+  bool _isSubmittingTareo = false;
+  String? _submitError;
 
   @override
   void didChangeDependencies() {
@@ -96,7 +100,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   }
 
   Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
-    final result = await Navigator.of(context).push<bool>(
+    final result = await Navigator.of(context).push<_AssignmentResult>(
       MaterialPageRoute(
         builder: (_) => CrewAssignmentPage(
           partida: partida,
@@ -106,8 +110,24 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
       ),
     );
 
-    if (result == true && mounted) {
-      _showMessage('Horas registradas para ${partida.name}');
+    if (result != null && result.lines.isNotEmpty) {
+      setState(() {
+        _pendingEntries.putIfAbsent(crew.id, () => []).addAll(
+              result.lines
+                  .map(
+                    (line) => _PendingEntry(
+                      memberId: line.memberId,
+                      memberName: line.memberName,
+                      partidaId: line.partidaId,
+                      partidaName: line.partidaName,
+                      hoursRegular: line.hoursRegular,
+                      hoursExtra: line.hoursExtra,
+                    ),
+                  )
+                  .toList(),
+            );
+      });
+      _showMessage('Horas guardadas en borrador para ${partida.name}');
     }
   }
 
@@ -189,6 +209,73 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  void _clearPending(int crewId) {
+    setState(() {
+      _pendingEntries.remove(crewId);
+      _submitError = null;
+    });
+  }
+
+  Future<void> _submitPendingEntries(Crew crew) async {
+    final pending = _pendingEntries[crew.id];
+    if (pending == null || pending.isEmpty) {
+      _showMessage('No hay horas pendientes para enviar.');
+      return;
+    }
+
+    final authState = context.read<AuthState>();
+    await authState.ensureValidToken();
+    final token = authState.token;
+    final project = authState.selectedProject;
+
+    if (token == null || project == null) {
+      _showMessage('Debes iniciar sesión nuevamente.');
+      return;
+    }
+
+    final lines = pending
+        .map(
+          (entry) => TimesheetLineInput(
+            personId: entry.memberId,
+            partidaId: entry.partidaId,
+            hoursRegular: entry.hoursRegular,
+            hoursOvertime: entry.hoursExtra,
+          ),
+        )
+        .toList();
+
+    setState(() {
+      _isSubmittingTareo = true;
+      _submitError = null;
+    });
+
+    try {
+      await _timesheetService.createTimesheet(
+        token: token,
+        projectId: project.projectId,
+        crewId: crew.id,
+        workDate: _selectedDate,
+        lines: lines,
+        note: 'Registro desde app',
+      );
+      setState(() {
+        _pendingEntries.remove(crew.id);
+      });
+      _showMessage('Tareo enviado correctamente');
+    } on ApiException catch (e) {
+      setState(() => _submitError = e.message);
+    } catch (_) {
+      setState(
+        () => _submitError =
+            'No se pudo enviar el tareo. Revisa tu conexión e inténtalo nuevamente.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingTareo = false);
+      }
+    }
   }
 
   @override
@@ -273,15 +360,16 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                     );
                   }
 
-                  final crew = selectedCrew!;
-                  final filteredPhases =
-                      _filteredCache[crew.id] ??=
-                          _filterPhasesForCrew(data.phases, crew);
+                      final crew = selectedCrew!;
+                      final filteredPhases =
+                          _filteredCache[crew.id] ??=
+                              _filterPhasesForCrew(data.phases, crew);
+                      final crewPending = _pendingEntries[crew.id] ?? const [];
 
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth > 960;
-                      final phasePanel = _PhasePanel(
+                      return LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isWide = constraints.maxWidth > 960;
+                          final phasePanel = _PhasePanel(
                         phases: filteredPhases,
                         onAssign: (partida) => _openAssignment(partida, crew),
                       );
@@ -295,6 +383,17 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                           dateSelector,
                           const SizedBox(height: 12.0),
                           crewHeader,
+                          if (crewPending.isNotEmpty) ...[
+                            const SizedBox(height: 12.0),
+                            _PendingEntriesCard(
+                              entries: crewPending,
+                              date: _selectedDate,
+                              isSubmitting: _isSubmittingTareo,
+                              errorMessage: _submitError,
+                              onClear: () => _clearPending(crew.id),
+                              onSubmit: () => _submitPendingEntries(crew),
+                            ),
+                          ],
                           const SizedBox(height: 12.0),
                           Expanded(child: phasePanel),
                         ],
@@ -661,6 +760,169 @@ class _SelectedCrewHeader extends StatelessWidget {
   }
 }
 
+class _PendingEntry {
+  _PendingEntry({
+    required this.memberId,
+    required this.memberName,
+    required this.partidaId,
+    required this.partidaName,
+    required this.hoursRegular,
+    required this.hoursExtra,
+  });
+
+  final int memberId;
+  final String memberName;
+  final int partidaId;
+  final String partidaName;
+  final double hoursRegular;
+  final double hoursExtra;
+}
+
+class _PendingEntriesCard extends StatelessWidget {
+  const _PendingEntriesCard({
+    required this.entries,
+    required this.date,
+    required this.isSubmitting,
+    required this.onSubmit,
+    required this.onClear,
+    this.errorMessage,
+  });
+
+  final List<_PendingEntry> entries;
+  final DateTime date;
+  final bool isSubmitting;
+  final VoidCallback onSubmit;
+  final VoidCallback onClear;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final grouped = <int, List<_PendingEntry>>{};
+    for (final entry in entries) {
+      grouped.putIfAbsent(entry.partidaId, () => []).add(entry);
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(18.0),
+        border: Border.all(color: theme.border),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tareo pendiente',
+                      style: theme.titleMedium,
+                    ),
+                    Text(
+                      'Fecha: ${dateTimeFormat('d MMM y', date, locale: 'es')}',
+                      style: theme.bodySmall.override(
+                        font: GoogleFonts.inter(),
+                        color: theme.mutedforeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: isSubmitting ? null : onClear,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Vaciar'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8.0),
+          ...grouped.entries.map((entry) {
+            final partidaName = entry.value.first.partidaName;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    partidaName,
+                    style: theme.labelLarge,
+                  ),
+                  ...entry.value.map(
+                    (line) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(line.memberName, style: theme.bodyMedium),
+                      subtitle: Text(
+                        'Normales: ${line.hoursRegular} · Extra: ${line.hoursExtra}',
+                        style: theme.bodySmall.override(
+                          font: GoogleFonts.inter(),
+                          color: theme.mutedforeground,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 8.0),
+            Text(
+              errorMessage!,
+              style: theme.bodyMedium.override(color: theme.error),
+            ),
+          ],
+          const SizedBox(height: 8.0),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isSubmitting ? null : onSubmit,
+              icon: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+              label: Text(isSubmitting ? 'Enviando...' : 'Enviar tareo'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssignmentResult {
+  _AssignmentResult({required this.lines});
+
+  final List<_AssignmentLine> lines;
+}
+
+class _AssignmentLine {
+  _AssignmentLine({
+    required this.memberId,
+    required this.memberName,
+    required this.partidaId,
+    required this.partidaName,
+    required this.hoursRegular,
+    required this.hoursExtra,
+  });
+
+  final int memberId;
+  final String memberName;
+  final int partidaId;
+  final String partidaName;
+  final double hoursRegular;
+  final double hoursExtra;
+}
+
 class _RegisterError extends StatelessWidget {
   const _RegisterError({
     required this.message,
@@ -719,7 +981,6 @@ class CrewAssignmentPage extends StatefulWidget {
 class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   late final Map<int, TextEditingController> _normalControllers;
   late final Map<int, TextEditingController> _extraControllers;
-  final _timesheetService = TimesheetService();
   bool _submitting = false;
   String? _error;
 
@@ -748,19 +1009,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   }
 
   Future<void> _save() async {
-    final authState = context.read<AuthState>();
-    await authState.ensureValidToken();
-    final token = authState.token;
-    final project = authState.selectedProject;
-
-    if (token == null || project == null) {
-      setState(() {
-        _error = 'Debes iniciar sesión nuevamente';
-      });
-      return;
-    }
-
-    final lines = <TimesheetLineInput>[];
+    final entries = <_AssignmentLine>[];
     for (final member in widget.crew.members) {
       final regular = double.tryParse(
             _normalControllers[member.id]?.text.replaceAll(',', '.') ?? '',
@@ -773,17 +1022,20 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
       if (regular <= 0 && extra <= 0) {
         continue;
       }
-      lines.add(
-        TimesheetLineInput(
-          personId: member.id,
+      final name = member.fullName.isNotEmpty ? member.fullName : member.name;
+      entries.add(
+        _AssignmentLine(
+          memberId: member.id,
+          memberName: name,
           partidaId: widget.partida.id,
+          partidaName: widget.partida.name,
           hoursRegular: regular.clamp(0, 24).toDouble(),
-          hoursOvertime: extra.clamp(0, 24).toDouble(),
+          hoursExtra: extra.clamp(0, 24).toDouble(),
         ),
       );
     }
 
-    if (lines.isEmpty) {
+    if (entries.isEmpty) {
       setState(() {
         _error = 'Ingresa al menos un registro de horas';
       });
@@ -795,28 +1047,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
       _error = null;
     });
 
-    try {
-      await _timesheetService.createTimesheet(
-        token: token,
-        projectId: project.projectId,
-        crewId: widget.crew.id,
-        workDate: widget.workDate,
-        lines: lines,
-        note: 'Registro desde app',
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on ApiException catch (e) {
-      setState(() => _error = e.message);
-    } catch (_) {
-      setState(
-        () => _error = 'No se pudo guardar el tareo. Inténtalo nuevamente',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _submitting = false);
-      }
-    }
+    Navigator.of(context).pop(_AssignmentResult(lines: entries));
   }
 
   @override
