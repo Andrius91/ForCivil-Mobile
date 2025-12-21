@@ -39,6 +39,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   String? _loadError;
   Crew? _selectedCrew;
   List<AttendanceRecord> _records = [];
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -91,7 +92,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       final records = await _attendanceService.fetchCrewAttendance(
         token: token,
         crewId: crew.id,
-        date: DateTime.now(),
+        date: _selectedDate,
       );
 
       if (!mounted) return;
@@ -121,6 +122,20 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      locale: const Locale('es'),
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+      await _loadCrewAndRecords();
+    }
   }
 
   Future<void> _startScan(String mode) async {
@@ -243,57 +258,12 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       scaffoldKey: GlobalKey<ScaffoldState>(),
       showDrawer: false,
       backgroundColor: theme.primaryBackground,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 900;
-          if (isWide) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: SingleChildScrollView(
-                    padding:
-                        const EdgeInsetsDirectional.fromSTEB(24, 16, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: summaryContent,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Padding(
-                    padding:
-                        const EdgeInsetsDirectional.fromSTEB(8, 16, 24, 16),
-                    child: _buildInfoPanel(theme),
-                  ),
-                ),
-              ],
-            );
-          }
-          return Column(
-            children: [
-              Expanded(
-                flex: 3,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsetsDirectional.fromSTEB(24, 16, 24, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: summaryContent,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(24, 0, 24, 16),
-                  child: _buildInfoPanel(theme),
-                ),
-              ),
-            ],
-          );
-        },
+      body: SingleChildScrollView(
+        padding: const EdgeInsetsDirectional.fromSTEB(24, 16, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: summaryContent,
+        ),
       ),
     );
   }
@@ -307,13 +277,13 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     return [
       _buildDateCard(theme, dateString, timeString, fullName),
       const SizedBox(height: 16.0),
+      _buildDateSelector(theme),
+      const SizedBox(height: 16.0),
       _buildActionButtons(theme),
       if (_message != null) ...[
         const SizedBox(height: 12.0),
         _buildMessageBanner(theme),
       ],
-      const SizedBox(height: 12.0),
-      _buildHistorySection(theme),
     ];
   }
 
@@ -371,6 +341,28 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDateSelector(FlutterFlowTheme theme) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(16.0),
+        border: Border.all(color: theme.border),
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.calendar_today),
+        title: const Text('Fecha de marcación'),
+        subtitle: Text(
+          dateTimeFormat('EEEE d MMMM y', _selectedDate, locale: 'es'),
+        ),
+        trailing: TextButton(
+          onPressed: _pickDate,
+          child: const Text('Cambiar'),
+        ),
       ),
     );
   }
@@ -460,170 +452,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       ),
     );
   }
-
-  Widget _buildHistorySection(FlutterFlowTheme theme) {
-    final entries = _records;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(color: theme.border),
-      ),
-      child: entries.isEmpty
-          ? Text(
-              'Sin registros recientes.',
-              style: theme.bodyMedium.override(
-                font: GoogleFonts.inter(),
-                color: theme.mutedforeground,
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Historial del día',
-                  style: theme.titleSmall.override(
-                    font: GoogleFonts.interTight(
-                      fontWeight: FontWeight.w600,
-                      fontStyle: theme.titleSmall.fontStyle,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12.0),
-                ...entries.map((record) {
-                  final color = _modeColor(
-                    record.checkOutTime != null ? 'SALIDA' : 'INGRESO',
-                    theme,
-                  );
-                  final ingreso = record.checkInTime != null
-                      ? dateTimeFormat('HH:mm', record.checkInTime!,
-                          locale: 'es')
-                      : '--';
-                  final salida = record.checkOutTime != null
-                      ? dateTimeFormat('HH:mm', record.checkOutTime!,
-                          locale: 'es')
-                      : '--';
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 12.0),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                record.fullName.isNotEmpty
-                                    ? record.fullName
-                                    : 'DNI ${record.dni}',
-                                style: theme.bodyMedium,
-                              ),
-                              Text(
-                                'Ingreso: $ingreso · Salida: $salida',
-                                style: theme.labelMedium.override(
-                                  font: GoogleFonts.inter(),
-                                  color: theme.mutedforeground,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            ),
-    );
-  }
-
-  Widget _buildInfoPanel(FlutterFlowTheme theme) {
-    final crew = _selectedCrew;
-    Widget child;
-    if (_isLoadingData) {
-      child = const Center(child: CircularProgressIndicator());
-    } else if (_loadError != null) {
-      child = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 48, color: theme.error),
-          const SizedBox(height: 12.0),
-          Text(
-            _loadError!,
-            textAlign: TextAlign.center,
-            style: theme.bodyMedium,
-          ),
-          const SizedBox(height: 12.0),
-          ElevatedButton(
-            onPressed: _loadCrewAndRecords,
-            child: const Text('Reintentar'),
-          ),
-        ],
-      );
-    } else if (crew == null) {
-      child = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.info_outline, size: 48, color: theme.mutedforeground),
-          const SizedBox(height: 12.0),
-          Text(
-            'Selecciona un proyecto para vincular una cuadrilla.',
-            textAlign: TextAlign.center,
-            style: theme.bodyMedium,
-          ),
-        ],
-      );
-    } else {
-      final dateLabel = dateTimeFormat('EEEE d MMMM', _now, locale: 'es');
-      child = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Cuadrilla asignada',
-            style: theme.titleMedium,
-          ),
-          const SizedBox(height: 8.0),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundColor: theme.primarycolor.withOpacity(0.1),
-              child: Icon(Icons.groups, color: theme.primarycolor),
-            ),
-            title: Text(crew.name, style: theme.titleMedium),
-            subtitle: Text(
-              'Integrantes: ${crew.members.length}\nCapataz: ${crew.foremanName}',
-              style: theme.bodySmall.override(
-                font: GoogleFonts.inter(),
-                color: theme.mutedforeground,
-              ),
-            ),
-          ),
-          const Divider(),
-          Text(
-            'Este dispositivo enviará registros de asistencia del $dateLabel.',
-            style: theme.bodySmall.override(
-              font: GoogleFonts.inter(),
-              color: theme.mutedforeground,
-            ),
-          ),
-          const SizedBox(height: 8.0),
-          Text(
-            'Usa los botones para marcar ingreso o salida y escanear el código QR del colaborador.',
-            style: theme.bodyMedium,
-          ),
-        ],
-      );
-    }
 
     return Container(
       width: double.infinity,
