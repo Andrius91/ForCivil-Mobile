@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ff_theme/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '/backend/api/attendance_service.dart';
 import '/backend/api/auth_service.dart';
 import '/backend/api/auth_state.dart';
 import '/backend/api/crew_service.dart';
@@ -28,6 +31,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   final _crewService = CrewService();
   final _timesheetService = TimesheetService();
   final _projectService = ProjectService();
+  final _attendanceService = AttendanceService();
 
   bool _initialized = false;
   late Future<_RegisterData> _dataFuture;
@@ -39,6 +43,12 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   String? _submitError;
   bool _isConfigured = false;
   ProjectDetail? _projectDetail;
+  bool _attendanceLoading = false;
+  bool _attendanceReady = false;
+  String? _attendanceError;
+  Map<int, AttendanceRecord> _attendanceByMember = {};
+  DateTime? _attendanceDate;
+  int? _attendanceCrewId;
 
   @override
   void didChangeDependencies() {
@@ -113,12 +123,117 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     );
     if (newDate != null) {
       setState(() => _selectedDate = newDate);
+      if (_selectedCrewId != null) {
+        unawaited(_loadAttendanceForCrew(_selectedCrewId!, newDate));
+      } else {
+        _resetAttendanceState();
+      }
+    }
+  }
+
+  void _resetAttendanceState() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _attendanceByMember = {};
+      _attendanceReady = false;
+      _attendanceError = null;
+      _attendanceCrewId = null;
+      _attendanceDate = null;
+      _attendanceLoading = false;
+    });
+  }
+
+  bool _attendanceMatchesSelection(int crewId, DateTime date) {
+    if (!_attendanceReady || _attendanceCrewId != crewId) {
+      return false;
+    }
+    final currentDate = _attendanceDate;
+    if (currentDate == null) {
+      return false;
+    }
+    return DateUtils.isSameDay(currentDate, date);
+  }
+
+  Future<bool> _ensureAttendanceForCrew(int crewId, DateTime date) async {
+    if (_attendanceMatchesSelection(crewId, date)) {
+      return true;
+    }
+    return _loadAttendanceForCrew(crewId, date);
+  }
+
+  Future<bool> _loadAttendanceForCrew(int crewId, DateTime date) async {
+    final authState = context.read<AuthState>();
+    await authState.ensureValidToken();
+    final token = authState.token;
+    if (token == null) {
+      setState(() {
+        _attendanceError = 'Debes iniciar sesión nuevamente.';
+        _attendanceByMember = {};
+        _attendanceReady = false;
+        _attendanceCrewId = null;
+        _attendanceDate = null;
+      });
+      return false;
+    }
+
+    setState(() {
+      _attendanceLoading = true;
+      _attendanceError = null;
+      _attendanceReady = false;
+    });
+
+    try {
+      final records = await _attendanceService.fetchCrewAttendance(
+        token: token,
+        crewId: crewId,
+        date: date,
+      );
+      final mapped = <int, AttendanceRecord>{};
+      for (final record in records) {
+        final memberId = record.personId;
+        if (memberId != null) {
+          mapped[memberId] = record;
+        }
+      }
+      if (!mounted) {
+        return false;
+      }
+      setState(() {
+        _attendanceByMember = mapped;
+        _attendanceCrewId = crewId;
+        _attendanceDate = date;
+        _attendanceLoading = false;
+        _attendanceReady = true;
+      });
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+      setState(() {
+        _attendanceLoading = false;
+        _attendanceError = error.toString();
+        _attendanceByMember = {};
+        _attendanceReady = false;
+        _attendanceCrewId = null;
+        _attendanceDate = null;
+      });
+      return false;
     }
   }
 
   Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
+    final attendanceOk = await _ensureAttendanceForCrew(crew.id, _selectedDate);
+    if (!attendanceOk) {
+      _showMessage('No se pudo obtener la asistencia para esta fecha.');
+      return;
+    }
     final normalLimit = _projectDetail?.limitForDate(_selectedDate);
     final remainingPerMember = <int, double>{};
+    final remainingExtraPerMember = <int, double>{};
+    final attendance = Map<int, AttendanceRecord>.from(_attendanceByMember);
     final existingEntries =
         (_pendingEntries[crew.id] ?? const []).where((entry) =>
             entry.partidaId == partida.id);
@@ -128,21 +243,48 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
       initialNormal[entry.memberId] = entry.hoursRegular;
       initialExtra[entry.memberId] = entry.hoursExtra;
     }
-    if (normalLimit != null) {
-      final pendingEntries = _pendingEntries[crew.id] ?? const [];
-      final used = <int, double>{};
-      for (final entry in pendingEntries) {
-        if (entry.partidaId == partida.id) {
-          continue;
+    final pendingEntries = _pendingEntries[crew.id] ?? const [];
+    final usedNormal = <int, double>{};
+    final usedExtra = <int, double>{};
+    for (final entry in pendingEntries) {
+      if (entry.partidaId == partida.id) {
+        continue;
+      }
+      usedNormal.update(
+        entry.memberId,
+        (value) => value + entry.hoursRegular,
+        ifAbsent: () => entry.hoursRegular,
+      );
+      usedExtra.update(
+        entry.memberId,
+        (value) => value + entry.hoursExtra,
+        ifAbsent: () => entry.hoursExtra,
+      );
+    }
+    for (final member in crew.members) {
+      final record = attendance[member.id];
+      if (record == null || !record.present) {
+        continue;
+      }
+      double? allowedNormal = record.hoursNormal;
+      if (normalLimit != null) {
+        if (allowedNormal != null) {
+          allowedNormal = allowedNormal > normalLimit ? normalLimit : allowedNormal;
+        } else {
+          allowedNormal = normalLimit;
         }
-        used.update(entry.memberId, (value) => value + entry.hoursRegular,
-            ifAbsent: () => entry.hoursRegular);
       }
-      for (final member in crew.members) {
-        final usedHours = used[member.id] ?? 0;
-        remainingPerMember[member.id] =
-            (normalLimit - usedHours).clamp(0, normalLimit);
-      }
+      final usableNormal = ((allowedNormal ?? 0).clamp(0, 24)).toDouble();
+      final usedHours = usedNormal[member.id] ?? 0;
+      final remainingNormal = usableNormal - usedHours;
+      remainingPerMember[member.id] =
+          remainingNormal > 0 ? remainingNormal : 0;
+
+      final allowedExtra = ((record.hoursExtra ?? 0).clamp(0, 24)).toDouble();
+      final usedExtraHours = usedExtra[member.id] ?? 0;
+      final remainingExtra = allowedExtra - usedExtraHours;
+      remainingExtraPerMember[member.id] =
+          remainingExtra > 0 ? remainingExtra : 0;
     }
 
     final result = await Navigator.of(context).push<_AssignmentResult>(
@@ -155,6 +297,9 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
           remainingNormalHours: remainingPerMember.isEmpty
               ? null
               : remainingPerMember,
+          remainingExtraHours:
+              remainingExtraPerMember.isEmpty ? null : remainingExtraPerMember,
+          attendanceRecords: Map<int, AttendanceRecord>.from(attendance),
           initialNormalHours: initialNormal.isEmpty ? null : initialNormal,
           initialExtraHours: initialExtra.isEmpty ? null : initialExtra,
         ),
@@ -432,9 +577,14 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                       date: _selectedDate,
                       crews: crews,
                       selectedCrewId: _selectedCrewId,
-                      onSelectCrew: (crew) => setState(() {
-                        _selectedCrewId = crew.id;
-                      }),
+                      onSelectCrew: (crew) {
+                        setState(() {
+                          _selectedCrewId = crew.id;
+                        });
+                        unawaited(
+                          _loadAttendanceForCrew(crew.id, _selectedDate),
+                        );
+                      },
                       onChangeDate: _pickDate,
                       onContinue: selectedCrew == null
                           ? null
@@ -476,6 +626,21 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                         ],
                       ),
                       const SizedBox(height: 12.0),
+                      if (_attendanceLoading)
+                        const LinearProgressIndicator(),
+                      if (_attendanceError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            'No se pudo sincronizar la asistencia: $_attendanceError',
+                            style: theme.bodySmall.override(
+                              font: GoogleFonts.inter(),
+                              color: theme.error,
+                            ),
+                          ),
+                        ),
+                      if (_attendanceLoading || _attendanceError != null)
+                        const SizedBox(height: 12.0),
                       Expanded(child: phasePanel),
                     ],
                   );
@@ -1266,6 +1431,8 @@ class CrewAssignmentPage extends StatefulWidget {
     required this.workDate,
     this.normalHourLimit,
     this.remainingNormalHours,
+    this.remainingExtraHours,
+    this.attendanceRecords,
     this.initialNormalHours,
     this.initialExtraHours,
   });
@@ -1275,6 +1442,8 @@ class CrewAssignmentPage extends StatefulWidget {
   final DateTime workDate;
   final double? normalHourLimit;
   final Map<int, double>? remainingNormalHours;
+  final Map<int, double>? remainingExtraHours;
+  final Map<int, AttendanceRecord>? attendanceRecords;
   final Map<int, double>? initialNormalHours;
   final Map<int, double>? initialExtraHours;
 
@@ -1287,6 +1456,23 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   final Map<int, double> _extraHours = {};
   bool _submitting = false;
   String? _error;
+
+  AttendanceRecord? _attendanceFor(int memberId) {
+    return widget.attendanceRecords?[memberId];
+  }
+
+  bool _canAssignMember(int memberId) {
+    final record = _attendanceFor(memberId);
+    return record != null && record.present;
+  }
+
+  double _maxNormalFor(int memberId) {
+    return widget.remainingNormalHours?[memberId] ?? 0;
+  }
+
+  double _maxExtraFor(int memberId) {
+    return widget.remainingExtraHours?[memberId] ?? 0;
+  }
 
   @override
   void initState() {
@@ -1307,8 +1493,15 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   Future<void> _save() async {
     final entries = <_AssignmentLine>[];
     for (final member in widget.crew.members) {
-      final regular = _normalHours[member.id] ?? 0;
-      final extra = _extraHours[member.id] ?? 0;
+      if (!_canAssignMember(member.id)) {
+        continue;
+      }
+      final maxNormal = _maxNormalFor(member.id);
+      final maxExtra = _maxExtraFor(member.id);
+      final regularRaw = _normalHours[member.id] ?? 0;
+      final extraRaw = _extraHours[member.id] ?? 0;
+      final regular = regularRaw > maxNormal ? maxNormal : regularRaw;
+      final extra = extraRaw > maxExtra ? maxExtra : extraRaw;
       if (regular <= 0 && extra <= 0) {
         continue;
       }
@@ -1418,6 +1611,15 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                 separatorBuilder: (_, __) => const SizedBox(height: 12.0),
                 itemBuilder: (context, index) {
                   final member = widget.crew.members[index];
+                  final attendanceRecord = _attendanceFor(member.id);
+                  final canAssign = _canAssignMember(member.id);
+                  final normalMax = _maxNormalFor(member.id);
+                  final extraMax = _maxExtraFor(member.id);
+                  final normalValue =
+                      (_normalHours[member.id] ?? 0).clamp(0, normalMax).toDouble();
+                  final extraValue =
+                      (_extraHours[member.id] ?? 0).clamp(0, extraMax).toDouble();
+                  final hasCapacity = normalMax > 0 || extraMax > 0;
                   return Card(
                     color: theme.card,
                     elevation: 0,
@@ -1475,10 +1677,10 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                               Expanded(
                                 child: _HoursStepper(
                                   label: 'Horas normales',
-                                  value: _normalHours[member.id] ?? 0,
-                                  enabled: !_submitting,
-                                  maxValue: widget.remainingNormalHours?[member.id] ??
-                                      widget.normalHourLimit ?? 24,
+                                  value: normalValue,
+                                  enabled:
+                                      !_submitting && canAssign && normalMax > 0,
+                                  maxValue: normalMax,
                                   onChanged: (value) => setState(() {
                                     _normalHours[member.id] = value;
                                   }),
@@ -1488,8 +1690,10 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                               Expanded(
                                 child: _HoursStepper(
                                   label: 'Horas extra',
-                                  value: _extraHours[member.id] ?? 0,
-                                  enabled: !_submitting,
+                                  value: extraValue,
+                                  enabled:
+                                      !_submitting && canAssign && extraMax > 0,
+                                  maxValue: extraMax,
                                   onChanged: (value) => setState(() {
                                     _extraHours[member.id] = value;
                                   }),
@@ -1497,6 +1701,39 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                               ),
                             ],
                           ),
+                          if (!canAssign)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                'Sin asistencia válida para la fecha seleccionada.',
+                                style: theme.bodySmall.override(
+                                  font: GoogleFonts.inter(),
+                                  color: theme.mutedforeground,
+                                ),
+                              ),
+                            )
+                          else if (!hasCapacity)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                'No quedan horas disponibles para este trabajador.',
+                                style: theme.bodySmall.override(
+                                  font: GoogleFonts.inter(),
+                                  color: theme.mutedforeground,
+                                ),
+                              ),
+                            )
+                          else if (attendanceRecord != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                'Disponible: ${normalMax.toStringAsFixed(1)}h normales · ${extraMax.toStringAsFixed(1)}h extra',
+                                style: theme.bodySmall.override(
+                                  font: GoogleFonts.inter(),
+                                  color: theme.mutedforeground,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

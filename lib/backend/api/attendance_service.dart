@@ -134,32 +134,44 @@ class AttendanceResponse {
 class AttendanceRecord {
   AttendanceRecord({
     required this.personId,
+    required this.projectId,
+    required this.crewId,
     required this.dni,
     required this.fullName,
     required this.present,
     required this.date,
     required this.checkInTime,
     required this.checkOutTime,
+    required this.hoursNormal,
+    required this.hoursExtra,
   });
 
   final int? personId;
+  final int? projectId;
+  final int? crewId;
   final String dni;
   final String fullName;
   final bool present;
   final DateTime? date;
   final DateTime? checkInTime;
   final DateTime? checkOutTime;
+  final double? hoursNormal;
+  final double? hoursExtra;
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     final dateString = json['date']?.toString();
     return AttendanceRecord(
       personId: json['personId'] as int?,
+      projectId: json['projectId'] as int?,
+      crewId: json['crewId'] as int?,
       dni: json['dni']?.toString() ?? '',
       fullName: json['fullName']?.toString() ?? '',
       present: json['present'] as bool? ?? true,
       date: DateTime.tryParse(dateString ?? ''),
       checkInTime: _parseDateTime(dateString, json['checkInTime']?.toString()),
       checkOutTime: _parseDateTime(dateString, json['checkOutTime']?.toString()),
+      hoursNormal: _toDouble(json['hoursNormal']),
+      hoursExtra: _toDouble(json['hoursExtra']),
     );
   }
 
@@ -170,5 +182,15 @@ class AttendanceRecord {
     final normalized = time.length == 5 ? '${time}:00' : time;
     final iso = '${date}T$normalized';
     return DateTime.tryParse(iso);
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse(value.toString());
   }
 }
