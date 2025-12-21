@@ -34,6 +34,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   final Map<int, List<_PendingEntry>> _pendingEntries = {};
   bool _isSubmittingTareo = false;
   String? _submitError;
+  bool _selectionConfirmed = false;
 
   @override
   void didChangeDependencies() {
@@ -344,38 +345,39 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                     onTap: _pickDate,
                   );
 
-                  if (selectedCrew == null) {
-                    return Column(
-                      children: [
-                        dateSelector,
-                        const SizedBox(height: 12.0),
-                        Expanded(
-                          child: _CrewSelectionView(
-                            crews: crews,
-                            onSelect: (crew) =>
-                                setState(() => _selectedCrewId = crew.id),
-                          ),
-                        ),
-                      ],
+                  if (selectedCrew == null || !_selectionConfirmed) {
+                    return _InitialSelectionStep(
+                      dateSelector: dateSelector,
+                      crews: crews,
+                      selectedCrew: selectedCrew,
+                      onSelectCrew: (crew) => setState(() {
+                        _selectedCrewId = crew.id;
+                        _selectionConfirmed = false;
+                      }),
+                      onConfirm: selectedCrew == null
+                          ? null
+                          : () => setState(() => _selectionConfirmed = true),
                     );
                   }
 
-                      final crew = selectedCrew!;
-                      final filteredPhases =
-                          _filteredCache[crew.id] ??=
-                              _filterPhasesForCrew(data.phases, crew);
-                      final crewPending = _pendingEntries[crew.id] ?? const [];
+                  final crew = selectedCrew!;
+                  final filteredPhases =
+                      _filteredCache[crew.id] ??=
+                          _filterPhasesForCrew(data.phases, crew);
+                  final crewPending = _pendingEntries[crew.id] ?? const [];
 
-                      return LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isWide = constraints.maxWidth > 960;
-                          final phasePanel = _PhasePanel(
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final phasePanel = _PhasePanel(
                         phases: filteredPhases,
                         onAssign: (partida) => _openAssignment(partida, crew),
                       );
                       final crewHeader = _SelectedCrewHeader(
                         crew: crew,
-                        onChange: () => setState(() => _selectedCrewId = null),
+                        onChange: () => setState(() {
+                          _selectedCrewId = null;
+                          _selectionConfirmed = false;
+                        }),
                       );
 
                       return Column(
@@ -431,77 +433,71 @@ class _PhasePanel extends StatelessWidget {
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Fases y partidas',
-          style: theme.titleMedium.override(
-            font: GoogleFonts.interTight(
-              fontWeight: FontWeight.w600,
-              fontStyle: theme.titleMedium.fontStyle,
+    return DefaultTabController(
+      length: phases.length,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Fases y partidas',
+            style: theme.titleMedium.override(
+              font: GoogleFonts.interTight(
+                fontWeight: FontWeight.w600,
+                fontStyle: theme.titleMedium.fontStyle,
+              ),
+              color: theme.primaryText,
             ),
-            color: theme.primaryText,
           ),
-        ),
-        const SizedBox(height: 12.0),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.only(top: 8.0, bottom: 32.0),
-            itemCount: phases.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 16.0),
-            itemBuilder: (context, index) {
-              final phase = phases[index];
-              return Container(
-                decoration: BoxDecoration(
-                  color: theme.card,
-                  borderRadius: BorderRadius.circular(20.0),
-                  border: Border.all(color: theme.border),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x11000000),
-                      blurRadius: 18.0,
-                      offset: Offset(0.0, 10.0),
-                    ),
-                  ],
-                ),
-                child: Theme(
-                  data: Theme.of(context).copyWith(
-                    dividerColor: Colors.transparent,
-                    listTileTheme: ListTileThemeData(
-                      iconColor: theme.primaryText,
-                      textColor: theme.primaryText,
-                    ),
-                  ),
-                  child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(
-                      horizontal: 20.0,
-                      vertical: 4.0,
-                    ),
-                    title: Text(
-                      phase.phaseName,
-                      style: theme.titleSmall.override(
-                        font: GoogleFonts.interTight(
-                          fontWeight: FontWeight.w500,
-                          fontStyle: theme.titleSmall.fontStyle,
-                        ),
-                        color: theme.primaryText,
-                      ),
-                    ),
-                    children: phase.partidas
-                        .map((partida) => _PartidaTile(
-                              partida: partida,
-                              onAssign: onAssign,
-                              level: 0,
-                            ))
-                        .toList(),
-                  ),
-                ),
-              );
-            },
+          const SizedBox(height: 8.0),
+          TabBar(
+            isScrollable: true,
+            labelStyle: theme.bodyMedium.override(
+              font: GoogleFonts.interTight(
+                fontWeight: FontWeight.w600,
+                fontStyle: theme.bodyMedium.fontStyle,
+              ),
+            ),
+            indicatorColor: theme.primarycolor,
+            tabs: [
+              for (final phase in phases)
+                Tab(text: phase.phaseName.isNotEmpty ? phase.phaseName : 'Fase'),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 12.0),
+          Expanded(
+            child: TabBarView(
+              children: [
+                for (final phase in phases)
+                  _PhaseListView(phase: phase, onAssign: onAssign),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhaseListView extends StatelessWidget {
+  const _PhaseListView({required this.phase, required this.onAssign});
+
+  final PlanPhase phase;
+  final void Function(PlanPartida partida) onAssign;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(0, 8.0, 0, 32.0),
+      itemCount: phase.partidas.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12.0),
+      itemBuilder: (context, index) {
+        final partida = phase.partidas[index];
+        return _PartidaTile(
+          partida: partida,
+          onAssign: onAssign,
+          level: 0,
+        );
+      },
     );
   }
 }
@@ -638,11 +634,91 @@ class _DateSelector extends StatelessWidget {
   }
 }
 
+class _InitialSelectionStep extends StatelessWidget {
+  const _InitialSelectionStep({
+    required this.dateSelector,
+    required this.crews,
+    required this.selectedCrew,
+    required this.onSelectCrew,
+    required this.onConfirm,
+  });
+
+  final Widget dateSelector;
+  final List<Crew> crews;
+  final Crew? selectedCrew;
+  final ValueChanged<Crew> onSelectCrew;
+  final VoidCallback? onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Column(
+      children: [
+        dateSelector,
+        const SizedBox(height: 12.0),
+        if (selectedCrew != null)
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: theme.card,
+              borderRadius: BorderRadius.circular(18.0),
+              border: Border.all(color: theme.border),
+            ),
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(selectedCrew!.name, style: theme.titleMedium),
+                      Text(
+                        'Integrantes: ${selectedCrew!.members.length}\nCapataz: ${selectedCrew!.foremanName}',
+                        style: theme.bodySmall.override(
+                          font: GoogleFonts.inter(),
+                          color: theme.mutedforeground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: onConfirm,
+                  child: const Text('Continuar'),
+                )
+              ],
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Text(
+              'Selecciona una cuadrilla para continuar',
+              style: theme.bodyMedium,
+            ),
+          ),
+        Expanded(
+          child: _CrewSelectionView(
+            crews: crews,
+            selectedCrewId: selectedCrew?.id,
+            onSelect: onSelectCrew,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CrewSelectionView extends StatelessWidget {
-  const _CrewSelectionView({required this.crews, required this.onSelect});
+  const _CrewSelectionView({
+    required this.crews,
+    required this.onSelect,
+    this.selectedCrewId,
+  });
 
   final List<Crew> crews;
   final ValueChanged<Crew> onSelect;
+  final int? selectedCrewId;
 
   @override
   Widget build(BuildContext context) {
@@ -655,53 +731,54 @@ class _CrewSelectionView extends StatelessWidget {
         isInfo: true,
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Selecciona la cuadrilla con la que deseas registrar el tareo.',
-          style: theme.bodyMedium,
-        ),
-        const SizedBox(height: 16.0),
-        Expanded(
-          child: ListView.separated(
-            itemCount: crews.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12.0),
-            itemBuilder: (context, index) {
-              final crew = crews[index];
-              return InkWell(
-                onTap: () => onSelect(crew),
-                borderRadius: BorderRadius.circular(18.0),
-                child: Container(
-                  padding: const EdgeInsets.all(20.0),
-                  decoration: BoxDecoration(
-                    color: theme.card,
-                    borderRadius: BorderRadius.circular(18.0),
-                    border: Border.all(color: theme.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+    return ListView.separated(
+      itemCount: crews.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12.0),
+      itemBuilder: (context, index) {
+        final crew = crews[index];
+        final isSelected = crew.id == selectedCrewId;
+        return InkWell(
+          onTap: () => onSelect(crew),
+          borderRadius: BorderRadius.circular(18.0),
+          child: Container(
+            padding: const EdgeInsets.all(20.0),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? theme.primarycolor.withOpacity(0.08)
+                  : theme.card,
+              borderRadius: BorderRadius.circular(18.0),
+              border: Border.all(
+                color: isSelected ? theme.primarycolor : theme.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
                         crew.name,
                         style: theme.titleMedium,
                       ),
-                      const SizedBox(height: 6.0),
-                      Text(
-                        'Integrantes: ${crew.members.length}\nCapataz: ${crew.foremanName}',
-                        style: theme.bodySmall.override(
-                          font: GoogleFonts.inter(),
-                          color: theme.mutedforeground,
-                        ),
-                      ),
-                    ],
+                    ),
+                    if (isSelected)
+                      Icon(Icons.check_circle, color: theme.primarycolor),
+                  ],
+                ),
+                const SizedBox(height: 6.0),
+                Text(
+                  'Integrantes: ${crew.members.length}\nCapataz: ${crew.foremanName}',
+                  style: theme.bodySmall.override(
+                    font: GoogleFonts.inter(),
+                    color: theme.mutedforeground,
                   ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
