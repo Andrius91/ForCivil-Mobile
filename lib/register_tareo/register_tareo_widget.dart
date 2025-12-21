@@ -219,6 +219,38 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     });
   }
 
+  Future<void> _showPendingDetail(Crew crew) async {
+    final entries = _pendingEntries[crew.id];
+    if (entries == null || entries.isEmpty) {
+      return;
+    }
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: _PendingEntriesDetail(
+            entries: entries,
+            date: _selectedDate,
+            isSubmitting: _isSubmittingTareo,
+            errorMessage: _submitError,
+            onClear: () {
+              Navigator.of(context).pop();
+              _clearPending(crew.id);
+            },
+            onSubmit: () {
+              Navigator.of(context).pop();
+              _submitPendingEntries(crew);
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submitPendingEntries(Crew crew) async {
     final pending = _pendingEntries[crew.id];
     if (pending == null || pending.isEmpty) {
@@ -387,13 +419,13 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                           crewHeader,
                           if (crewPending.isNotEmpty) ...[
                             const SizedBox(height: 12.0),
-                            _PendingEntriesCard(
+                            _PendingEntriesSummary(
                               entries: crewPending,
                               date: _selectedDate,
                               isSubmitting: _isSubmittingTareo,
                               errorMessage: _submitError,
-                              onClear: () => _clearPending(crew.id),
                               onSubmit: () => _submitPendingEntries(crew),
+                              onView: () => _showPendingDetail(crew),
                             ),
                           ],
                           const SizedBox(height: 12.0),
@@ -855,8 +887,101 @@ class _PendingEntry {
   final double hoursExtra;
 }
 
-class _PendingEntriesCard extends StatelessWidget {
-  const _PendingEntriesCard({
+class _PendingEntriesSummary extends StatelessWidget {
+  const _PendingEntriesSummary({
+    required this.entries,
+    required this.date,
+    required this.isSubmitting,
+    required this.onSubmit,
+    required this.onView,
+    this.errorMessage,
+  });
+
+  final List<_PendingEntry> entries;
+  final DateTime date;
+  final bool isSubmitting;
+  final VoidCallback onSubmit;
+  final VoidCallback onView;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final totalNormal = entries.fold<double>(
+        0, (sum, entry) => sum + entry.hoursRegular);
+    final totalExtra = entries.fold<double>(
+        0, (sum, entry) => sum + entry.hoursExtra);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(18.0),
+        border: Border.all(color: theme.border),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tareo pendiente', style: theme.titleMedium),
+                    Text(
+                      '${entries.length} registros · ${dateTimeFormat('d MMM y', date, locale: 'es')}',
+                      style: theme.bodySmall.override(
+                        font: GoogleFonts.inter(),
+                        color: theme.mutedforeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: onView,
+                child: const Text('Ver detalle'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8.0),
+          Row(
+            children: [
+              _HoursBadge(
+                label: 'Normales',
+                value: totalNormal,
+                color: theme.primarycolor,
+              ),
+              const SizedBox(width: 8.0),
+              _HoursBadge(
+                label: 'Extra',
+                value: totalExtra,
+                color: theme.chart3,
+              ),
+              const Spacer(),
+              ElevatedButton(
+                onPressed: isSubmitting ? null : onSubmit,
+                child: Text(isSubmitting ? 'Enviando...' : 'Enviar'),
+              )
+            ],
+          ),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 8.0),
+            Text(
+              errorMessage!,
+              style: theme.bodyMedium.override(color: theme.error),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingEntriesDetail extends StatelessWidget {
+  const _PendingEntriesDetail({
     required this.entries,
     required this.date,
     required this.isSubmitting,
@@ -880,95 +1005,138 @@ class _PendingEntriesCard extends StatelessWidget {
       grouped.putIfAbsent(entry.partidaId, () => []).add(entry);
     }
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(18.0),
-        border: Border.all(color: theme.border),
-      ),
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tareo pendiente',
-                      style: theme.titleMedium,
-                    ),
-                    Text(
-                      'Fecha: ${dateTimeFormat('d MMM y', date, locale: 'es')}',
-                      style: theme.bodySmall.override(
-                        font: GoogleFonts.inter(),
-                        color: theme.mutedforeground,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                onPressed: isSubmitting ? null : onClear,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('Vaciar'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8.0),
-          ...grouped.entries.map((entry) {
-            final partidaName = entry.value.first.partidaName;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    partidaName,
-                    style: theme.labelLarge,
-                  ),
-                  ...entry.value.map(
-                    (line) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(line.memberName, style: theme.bodyMedium),
-                      subtitle: Text(
-                        'Normales: ${line.hoursRegular} · Extra: ${line.hoursExtra}',
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Detalle del tareo', style: theme.titleMedium),
+                      Text(
+                        dateTimeFormat('EEEE d MMMM y', date, locale: 'es'),
                         style: theme.bodySmall.override(
                           font: GoogleFonts.inter(),
                           color: theme.mutedforeground,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12.0),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: grouped.entries.map((entry) {
+                  final partidaName = entry.value.first.partidaName;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(partidaName, style: theme.labelLarge),
+                        ...entry.value.map(
+                          (line) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(line.memberName, style: theme.bodyMedium),
+                            subtitle: Text(
+                              'Normales: ${line.hoursRegular} · Extra: ${line.hoursExtra}',
+                              style: theme.bodySmall.override(
+                                font: GoogleFonts.inter(),
+                                color: theme.mutedforeground,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
-            );
-          }),
-          if (errorMessage != null) ...[
-            const SizedBox(height: 8.0),
-            Text(
-              errorMessage!,
-              style: theme.bodyMedium.override(color: theme.error),
+            ),
+            if (errorMessage != null) ...[
+              const SizedBox(height: 8.0),
+              Text(
+                errorMessage!,
+                style: theme.bodyMedium.override(color: theme.error),
+              ),
+            ],
+            const SizedBox(height: 16.0),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: isSubmitting ? null : onClear,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Vaciar'),
+                  ),
+                ),
+                const SizedBox(width: 12.0),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: isSubmitting ? null : onSubmit,
+                    icon: isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                    label: Text(isSubmitting ? 'Enviando...' : 'Enviar'),
+                  ),
+                ),
+              ],
             ),
           ],
-          const SizedBox(height: 8.0),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: isSubmitting ? null : onSubmit,
-              icon: isSubmitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
-              label: Text(isSubmitting ? 'Enviando...' : 'Enviar tareo'),
-            ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HoursBadge extends StatelessWidget {
+  const _HoursBadge({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.labelSmall.override(color: color),
+          ),
+          Text(
+            value.toStringAsFixed(value % 1 == 0 ? 0 : 1),
+            style: theme.titleSmall.override(color: theme.primaryText),
           ),
         ],
       ),
