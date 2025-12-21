@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ff_theme/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1175,6 +1176,13 @@ class _HoursStepper extends StatelessWidget {
   double _decrement(double current) => (current - 0.5).clamp(0, 24);
 }
 
+ImageProvider? _memberPhotoProvider(String? url) {
+  if (url == null || url.isEmpty) {
+    return null;
+  }
+  return CachedNetworkImageProvider(url);
+}
+
 class _RegisterError extends StatelessWidget {
   const _RegisterError({
     required this.message,
@@ -1380,9 +1388,8 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                             children: [
                               CircleAvatar(
                                 radius: 24,
-                                backgroundImage: member.photoUrl != null
-                                    ? NetworkImage(member.photoUrl!)
-                                    : null,
+                                backgroundImage:
+                                    _memberPhotoProvider(member.photoUrl),
                                 child: member.photoUrl == null
                                     ? Text(
                                         member.fullName.isNotEmpty

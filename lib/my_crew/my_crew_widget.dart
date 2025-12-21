@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ff_theme/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -259,8 +260,7 @@ class _CrewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CircleAvatar(
-            backgroundImage:
-                member.photoUrl != null ? NetworkImage(member.photoUrl!) : null,
+            backgroundImage: _memberPhotoProvider(member.photoUrl),
             radius: 28,
             child: member.photoUrl == null
                 ? Text(initials, style: theme.titleMedium)
@@ -434,4 +434,11 @@ class _CrewEmptyState extends StatelessWidget {
       ],
     );
   }
+}
+
+ImageProvider? _memberPhotoProvider(String? url) {
+  if (url == null || url.isEmpty) {
+    return null;
+  }
+  return CachedNetworkImageProvider(url);
 }
