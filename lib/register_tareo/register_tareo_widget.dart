@@ -119,10 +119,22 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
     final normalLimit = _projectDetail?.limitForDate(_selectedDate);
     final remainingPerMember = <int, double>{};
+    final existingEntries =
+        (_pendingEntries[crew.id] ?? const []).where((entry) =>
+            entry.partidaId == partida.id);
+    final initialNormal = <int, double>{};
+    final initialExtra = <int, double>{};
+    for (final entry in existingEntries) {
+      initialNormal[entry.memberId] = entry.hoursRegular;
+      initialExtra[entry.memberId] = entry.hoursExtra;
+    }
     if (normalLimit != null) {
       final pendingEntries = _pendingEntries[crew.id] ?? const [];
       final used = <int, double>{};
       for (final entry in pendingEntries) {
+        if (entry.partidaId == partida.id) {
+          continue;
+        }
         used.update(entry.memberId, (value) => value + entry.hoursRegular,
             ifAbsent: () => entry.hoursRegular);
       }
@@ -143,12 +155,17 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
           remainingNormalHours: remainingPerMember.isEmpty
               ? null
               : remainingPerMember,
+          initialNormalHours: initialNormal.isEmpty ? null : initialNormal,
+          initialExtraHours: initialExtra.isEmpty ? null : initialExtra,
         ),
       ),
     );
 
     if (result != null && result.lines.isNotEmpty) {
       setState(() {
+        _pendingEntries.putIfAbsent(crew.id, () => []);
+        _pendingEntries[crew.id]!
+            .removeWhere((entry) => entry.partidaId == partida.id);
         _pendingEntries.putIfAbsent(crew.id, () => []).addAll(
               result.lines
                   .map(
@@ -1274,6 +1291,8 @@ class CrewAssignmentPage extends StatefulWidget {
     required this.workDate,
     this.normalHourLimit,
     this.remainingNormalHours,
+    this.initialNormalHours,
+    this.initialExtraHours,
   });
 
   final PlanPartida partida;
@@ -1281,6 +1300,8 @@ class CrewAssignmentPage extends StatefulWidget {
   final DateTime workDate;
   final double? normalHourLimit;
   final Map<int, double>? remainingNormalHours;
+  final Map<int, double>? initialNormalHours;
+  final Map<int, double>? initialExtraHours;
 
   @override
   State<CrewAssignmentPage> createState() => _CrewAssignmentPageState();
@@ -1296,8 +1317,10 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   void initState() {
     super.initState();
     for (final member in widget.crew.members) {
-      _normalHours[member.id] = 0;
-      _extraHours[member.id] = 0;
+      _normalHours[member.id] =
+          widget.initialNormalHours?[member.id] ?? 0;
+      _extraHours[member.id] =
+          widget.initialExtraHours?[member.id] ?? 0;
     }
   }
 
