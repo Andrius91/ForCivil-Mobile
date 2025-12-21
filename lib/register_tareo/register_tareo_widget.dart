@@ -34,6 +34,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   final Map<int, List<_PendingEntry>> _pendingEntries = {};
   bool _isSubmittingTareo = false;
   String? _submitError;
+  bool _isConfigured = false;
 
   @override
   void didChangeDependencies() {
