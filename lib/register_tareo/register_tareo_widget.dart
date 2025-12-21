@@ -26,6 +26,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
   bool _initialized = false;
   late Future<_RegisterData> _dataFuture;
+  int? _selectedCrewId;
 
   @override
   void didChangeDependencies() {
@@ -70,20 +71,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     await _dataFuture;
   }
 
-  Future<void> _openAssignment(
-    PlanPartida partida,
-    List<Crew> crews,
-  ) async {
-    if (crews.isEmpty) {
-      _showMessage('No tienes cuadrillas disponibles para registrar horas');
-      return;
-    }
-
-    final crew = await _selectCrew(crews);
-    if (crew == null) {
-      return;
-    }
-
+  Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => CrewAssignmentPage(partida: partida, crew: crew),
@@ -95,42 +83,78 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     }
   }
 
-  Future<Crew?> _selectCrew(List<Crew> crews) async {
-    if (crews.length == 1) {
-      return crews.first;
+  List<PlanPhase> _filterPhasesForCrew(
+    List<PlanPhase> phases,
+    Crew crew,
+  ) {
+    final codeSet = crew.partidas
+        .map((p) => _normalizeCode(p.code))
+        .whereType<String>()
+        .toSet();
+    final nameSet = crew.partidas
+        .map((p) => _normalizeName(p.name))
+        .whereType<String>()
+        .toSet();
+
+    PlanPartida? filterPartida(PlanPartida partida) {
+      final filteredChildren = partida.children
+          .map(filterPartida)
+          .whereType<PlanPartida>()
+          .toList();
+      final codeMatch = codeSet.isNotEmpty
+          ? codeSet.contains(_normalizeCode(partida.code))
+          : false;
+      final nameMatch = nameSet.isNotEmpty
+          ? nameSet.contains(_normalizeName(partida.name))
+          : false;
+      if (!codeMatch && !nameMatch && filteredChildren.isEmpty) {
+        return null;
+      }
+      return PlanPartida(
+        id: partida.id,
+        code: partida.code,
+        name: partida.name,
+        unit: partida.unit,
+        metric: partida.metric,
+        children: filteredChildren,
+        leaf: filteredChildren.isEmpty,
+      );
     }
 
-    return showModalBottomSheet<Crew>(
-      context: context,
-      builder: (context) {
-        final theme = FlutterFlowTheme.of(context);
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  'Selecciona la cuadrilla',
-                  style: theme.titleMedium,
-                ),
-              ),
-              ...crews.map(
-                (crew) => ListTile(
-                  title: Text(crew.name),
-                  subtitle: Text(
-                    'Integrantes: ${crew.members.length}',
-                    style: theme.bodySmall,
-                  ),
-                  onTap: () => Navigator.of(context).pop(crew),
-                ),
-              ),
-              const SizedBox(height: 12.0),
-            ],
-          ),
-        );
-      },
-    );
+    final filteredPhases = <PlanPhase>[];
+    for (final phase in phases) {
+      final filteredPartidas = phase.partidas
+          .map(filterPartida)
+          .whereType<PlanPartida>()
+          .toList();
+      if (filteredPartidas.isEmpty) {
+        continue;
+      }
+      filteredPhases.add(
+        PlanPhase(
+          phaseId: phase.phaseId,
+          phaseName: phase.phaseName,
+          partidas: filteredPartidas,
+        ),
+      );
+    }
+    return filteredPhases;
+  }
+
+  String? _normalizeCode(String? code) {
+    if (code == null) {
+      return null;
+    }
+    final normalized = code.trim().toUpperCase();
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  String? _normalizeName(String? name) {
+    if (name == null) {
+      return null;
+    }
+    final normalized = name.trim().toLowerCase();
+    return normalized.isEmpty ? null : normalized;
   }
 
   void _showMessage(String message) {
@@ -191,29 +215,70 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                       isInfo: true,
                     );
                   }
+                  final crews = data.crews;
+                  Crew? selectedCrew;
+                  for (final crew in crews) {
+                    if (crew.id == _selectedCrewId) {
+                      selectedCrew = crew;
+                      break;
+                    }
+                  }
+
+                  if (selectedCrew == null) {
+                    return _CrewSelectionView(
+                      crews: crews,
+                      onSelect: (crew) =>
+                          setState(() => _selectedCrewId = crew.id),
+                    );
+                  }
+
+                  final filteredPhases =
+                      _filterPhasesForCrew(data.phases, selectedCrew);
+
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth > 960;
                       final phasePanel = _PhasePanel(
-                        phases: data.phases,
-                        onAssign: (partida) => _openAssignment(partida, data.crews),
+                        phases: filteredPhases,
+                        onAssign: (partida) =>
+                            _openAssignment(partida, selectedCrew),
                       );
-                      final crewPanel = _CrewPanel(crews: data.crews);
+                      final crewHeader = _SelectedCrewHeader(
+                        crew: selectedCrew,
+                        onChange: () => setState(() => _selectedCrewId = null),
+                      );
 
                       if (isWide) {
                         return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(flex: 2, child: phasePanel),
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                children: [
+                                  crewHeader,
+                                  const SizedBox(height: 12.0),
+                                  Expanded(child: phasePanel),
+                                ],
+                              ),
+                            ),
                             const SizedBox(width: 16.0),
-                            Expanded(child: crewPanel),
+                            Expanded(
+                              child: _CrewPanel(crews: crews),
+                            ),
                           ],
                         );
                       }
                       return Column(
                         children: [
-                          Expanded(flex: 3, child: phasePanel),
+                          crewHeader,
+                          const SizedBox(height: 12.0),
+                          Expanded(child: phasePanel),
                           const SizedBox(height: 16.0),
-                          Expanded(flex: 2, child: crewPanel),
+                          SizedBox(
+                            height: 220,
+                            child: _CrewPanel(crews: crews),
+                          ),
                         ],
                       );
                     },
@@ -240,8 +305,12 @@ class _PhasePanel extends StatelessWidget {
     if (phases.isEmpty) {
       return Center(
         child: Text(
-          'Sin partidas disponibles',
-          style: theme.bodyLarge,
+          'Esta cuadrilla no tiene partidas asignadas en el plan.',
+          textAlign: TextAlign.center,
+          style: theme.bodyMedium.override(
+            font: GoogleFonts.inter(),
+            color: theme.mutedforeground,
+          ),
         ),
       );
     }
@@ -494,6 +563,128 @@ class _CrewPanel extends StatelessWidget {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _CrewSelectionView extends StatelessWidget {
+  const _CrewSelectionView({required this.crews, required this.onSelect});
+
+  final List<Crew> crews;
+  final ValueChanged<Crew> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    if (crews.isEmpty) {
+      return _RegisterError(
+        message:
+            'No tienes cuadrillas asignadas en este proyecto todavía.',
+        onRetry: () {},
+        isInfo: true,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selecciona la cuadrilla con la que deseas registrar el tareo.',
+          style: theme.bodyMedium,
+        ),
+        const SizedBox(height: 16.0),
+        Expanded(
+          child: ListView.separated(
+            itemCount: crews.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12.0),
+            itemBuilder: (context, index) {
+              final crew = crews[index];
+              return InkWell(
+                onTap: () => onSelect(crew),
+                borderRadius: BorderRadius.circular(18.0),
+                child: Container(
+                  padding: const EdgeInsets.all(20.0),
+                  decoration: BoxDecoration(
+                    color: theme.card,
+                    borderRadius: BorderRadius.circular(18.0),
+                    border: Border.all(color: theme.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        crew.name,
+                        style: theme.titleMedium,
+                      ),
+                      const SizedBox(height: 6.0),
+                      Text(
+                        'Integrantes: ${crew.members.length}\nCapataz: ${crew.foremanName}',
+                        style: theme.bodySmall.override(
+                          font: GoogleFonts.inter(),
+                          color: theme.mutedforeground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectedCrewHeader extends StatelessWidget {
+  const _SelectedCrewHeader({required this.crew, required this.onChange});
+
+  final Crew crew;
+  final VoidCallback onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(18.0),
+        border: Border.all(color: theme.border),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: theme.primarycolor.withOpacity(0.15),
+            child: Icon(Icons.groups, color: theme.primarycolor),
+          ),
+          const SizedBox(width: 12.0),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  crew.name,
+                  style: theme.titleMedium,
+                ),
+                Text(
+                  'Integrantes: ${crew.members.length} · Capataz: ${crew.foremanName}',
+                  style: theme.bodySmall.override(
+                    font: GoogleFonts.inter(),
+                    color: theme.mutedforeground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onChange,
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('Cambiar'),
+          ),
+        ],
       ),
     );
   }
