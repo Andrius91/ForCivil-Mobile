@@ -453,55 +453,30 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                     onAssign: (partida) => _openAssignment(partida, crew),
                   );
 
-                  return Stack(
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
                         children: [
-                          Wrap(
-                            spacing: 8.0,
-                            runSpacing: 8.0,
-                            children: [
-                              _InfoChip(
-                                icon: Icons.calendar_month,
-                                label: dateTimeFormat(
-                                    'EEE d MMM', _selectedDate,
-                                    locale: 'es'),
-                                onTap: _pickDate,
-                              ),
-                              _InfoChip(
-                                icon: Icons.groups,
-                                label: crew.name,
-                                onTap: () => setState(() {
-                                  _isConfigured = false;
-                                }),
-                              ),
-                            ],
+                          _InfoChip(
+                            icon: Icons.calendar_month,
+                            label: dateTimeFormat('EEE d MMM', _selectedDate,
+                                locale: 'es'),
+                            onTap: _pickDate,
                           ),
-                          if (crewPending.isNotEmpty) ...[
-                            const SizedBox(height: 8.0),
-                            Text(
-                              '${crewPending.length} registros en borrador',
-                              style: theme.bodySmall.override(
-                                font: GoogleFonts.inter(),
-                                color: theme.mutedforeground,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 12.0),
-                          Expanded(child: phasePanel),
+                          _InfoChip(
+                            icon: Icons.groups,
+                            label: crew.name,
+                            onTap: () => setState(() {
+                              _isConfigured = false;
+                            }),
+                          ),
                         ],
                       ),
-                      if (crewPending.isNotEmpty)
-                        Positioned(
-                          bottom: 24,
-                          right: 24,
-                          child: FloatingActionButton.extended(
-                            onPressed: () => _showPendingDetail(crew),
-                            icon: const Icon(Icons.outbox),
-                            label: Text('Enviar (${crewPending.length})'),
-                          ),
-                        ),
+                      const SizedBox(height: 12.0),
+                      Expanded(child: phasePanel),
                     ],
                   );
                 },
