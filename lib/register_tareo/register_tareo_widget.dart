@@ -27,6 +27,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   bool _initialized = false;
   late Future<_RegisterData> _dataFuture;
   int? _selectedCrewId;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void didChangeDependencies() {
@@ -71,10 +72,33 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     await _dataFuture;
   }
 
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year - 1, now.month, now.day);
+    final lastDate = DateTime(now.year + 1, now.month, now.day);
+    final newDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: 'Selecciona la fecha de trabajo',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+      locale: const Locale('es'),
+    );
+    if (newDate != null) {
+      setState(() => _selectedDate = newDate);
+    }
+  }
+
   Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CrewAssignmentPage(partida: partida, crew: crew),
+        builder: (_) => CrewAssignmentPage(
+          partida: partida,
+          crew: crew,
+          workDate: _selectedDate,
+        ),
       ),
     );
 
@@ -224,11 +248,24 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                     }
                   }
 
+                  final dateSelector = _DateSelector(
+                    date: _selectedDate,
+                    onTap: _pickDate,
+                  );
+
                   if (selectedCrew == null) {
-                    return _CrewSelectionView(
-                      crews: crews,
-                      onSelect: (crew) =>
-                          setState(() => _selectedCrewId = crew.id),
+                    return Column(
+                      children: [
+                        dateSelector,
+                        const SizedBox(height: 12.0),
+                        Expanded(
+                          child: _CrewSelectionView(
+                            crews: crews,
+                            onSelect: (crew) =>
+                                setState(() => _selectedCrewId = crew.id),
+                          ),
+                        ),
+                      ],
                     );
                   }
 
@@ -250,6 +287,8 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
                       return Column(
                         children: [
+                          dateSelector,
+                          const SizedBox(height: 12.0),
                           crewHeader,
                           const SizedBox(height: 12.0),
                           Expanded(child: phasePanel),
@@ -460,6 +499,41 @@ class _PartidaTile extends StatelessWidget {
   }
 }
 
+class _DateSelector extends StatelessWidget {
+  const _DateSelector({required this.date, required this.onTap});
+
+  final DateTime date;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(18.0),
+        border: Border.all(color: theme.border),
+      ),
+      child: ListTile(
+        title: Text(
+          'Fecha de trabajo',
+          style: theme.labelLarge,
+        ),
+        subtitle: Text(
+          dateTimeFormat('EEEE d MMMM y', date, locale: 'es'),
+          style: theme.bodyMedium,
+        ),
+        trailing: TextButton.icon(
+          onPressed: onTap,
+          icon: const Icon(Icons.calendar_today),
+          label: const Text('Cambiar'),
+        ),
+      ),
+    );
+  }
+}
+
 class _CrewSelectionView extends StatelessWidget {
   const _CrewSelectionView({required this.crews, required this.onSelect});
 
@@ -623,10 +697,15 @@ class _RegisterError extends StatelessWidget {
 }
 
 class CrewAssignmentPage extends StatefulWidget {
-  const CrewAssignmentPage({required this.partida, required this.crew});
+  const CrewAssignmentPage({
+    required this.partida,
+    required this.crew,
+    required this.workDate,
+  });
 
   final PlanPartida partida;
   final Crew crew;
+  final DateTime workDate;
 
   @override
   State<CrewAssignmentPage> createState() => _CrewAssignmentPageState();
@@ -715,7 +794,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
         token: token,
         projectId: project.projectId,
         crewId: widget.crew.id,
-        workDate: DateTime.now(),
+        workDate: widget.workDate,
         lines: lines,
         note: 'Registro desde app',
       );
@@ -764,12 +843,25 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                       .titleMedium
                       .override(font: GoogleFonts.interTight()),
                 ),
-                subtitle: widget.partida.metric != null
-                    ? Text(
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.partida.metric != null)
+                      Text(
                         'Metrado: ${widget.partida.metric} ${widget.partida.unit ?? ''}',
                         style: FlutterFlowTheme.of(context).bodySmall,
-                      )
-                    : null,
+                      ),
+                    Text(
+                      'Fecha: ${dateTimeFormat('d MMMM y', widget.workDate, locale: 'es')}',
+                      style: FlutterFlowTheme.of(context)
+                          .labelMedium
+                          .override(
+                            font: GoogleFonts.inter(),
+                            color: theme.mutedforeground,
+                          ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12.0),
