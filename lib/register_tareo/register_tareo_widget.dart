@@ -248,37 +248,11 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                         onChange: () => setState(() => _selectedCrewId = null),
                       );
 
-                      if (isWide) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                children: [
-                                  crewHeader,
-                                  const SizedBox(height: 12.0),
-                                  Expanded(child: phasePanel),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16.0),
-                            Expanded(
-                              child: _CrewPanel(crews: crews),
-                            ),
-                          ],
-                        );
-                      }
                       return Column(
                         children: [
                           crewHeader,
                           const SizedBox(height: 12.0),
                           Expanded(child: phasePanel),
-                          const SizedBox(height: 16.0),
-                          SizedBox(
-                            height: 220,
-                            child: _CrewPanel(crews: crews),
-                          ),
                         ],
                       );
                     },
@@ -481,88 +455,6 @@ class _PartidaTile extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CrewPanel extends StatelessWidget {
-  const _CrewPanel({required this.crews});
-
-  final List<Crew> crews;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FlutterFlowTheme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(24.0),
-        border: Border.all(color: theme.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-        child: crews.isEmpty
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.info_outline, size: 48, color: theme.mutedforeground),
-                  const SizedBox(height: 16.0),
-                  Text(
-                    'No hay cuadrillas asignadas a tu usuario en este proyecto.',
-                    textAlign: TextAlign.center,
-                    style: theme.bodyLarge,
-                  ),
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Tus cuadrillas',
-                    style: theme.titleMedium,
-                  ),
-                  const SizedBox(height: 12.0),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: crews.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12.0),
-                      itemBuilder: (context, index) {
-                        final crew = crews[index];
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: theme.card,
-                            borderRadius: BorderRadius.circular(16.0),
-                            border: Border.all(color: theme.border),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16.0, vertical: 8.0),
-                            title: Text(crew.name, style: theme.titleMedium),
-                            subtitle: Text(
-                              '${crew.members.length} integrantes · Capataz: ${crew.foremanName}',
-                              style: theme.bodySmall.override(
-                                font: GoogleFonts.inter(),
-                                color: theme.mutedforeground,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8.0),
-                  Text(
-                    crews.length == 1
-                        ? 'Al registrar horas se utilizará la cuadrilla "${crews.first.name}".'
-                        : 'Selecciona la cuadrilla al asignar horas para enviarlas correctamente.',
-                    style: theme.bodySmall.override(
-                      font: GoogleFonts.inter(),
-                      color: theme.mutedforeground,
-                    ),
-                  ),
-                ],
-              ),
       ),
     );
   }
