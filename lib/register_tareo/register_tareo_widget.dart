@@ -9,6 +9,7 @@ import '/backend/api/auth_state.dart';
 import '/backend/api/crew_service.dart';
 import '/backend/api/plan_service.dart';
 import '/backend/api/timesheet_service.dart';
+import '/backend/api/project_service.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/widgets/for_civil_layout.dart';
 
@@ -26,6 +27,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   final _planService = PlanService();
   final _crewService = CrewService();
   final _timesheetService = TimesheetService();
+  final _projectService = ProjectService();
 
   bool _initialized = false;
   late Future<_RegisterData> _dataFuture;
@@ -36,6 +38,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   bool _isSubmittingTareo = false;
   String? _submitError;
   bool _isConfigured = false;
+  ProjectDetail? _projectDetail;
 
   @override
   void didChangeDependencies() {
@@ -68,10 +71,22 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
       projectId: project.projectId,
       token: token,
     );
+    final projectFuture = _projectService.fetchProject(
+      token: token,
+      projectId: project.projectId,
+    );
 
     final phases = await phasesFuture;
     final crews = await crewsFuture;
-    return _RegisterData(phases: phases, crews: crews);
+    final projectDetail = await projectFuture;
+
+    _projectDetail = projectDetail;
+
+    return _RegisterData(
+      phases: phases,
+      crews: crews,
+      project: projectDetail,
+    );
   }
 
   Future<void> _reload() async {
@@ -102,12 +117,15 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   }
 
   Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
+    final normalLimit = _projectDetail?.limitForDate(_selectedDate);
+
     final result = await Navigator.of(context).push<_AssignmentResult>(
       MaterialPageRoute(
         builder: (_) => CrewAssignmentPage(
           partida: partida,
           crew: crew,
           workDate: _selectedDate,
+          normalHourLimit: normalLimit,
         ),
       ),
     );
@@ -364,6 +382,8 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                       isInfo: true,
                     );
                   }
+                  _projectDetail ??= data.project;
+
                   final crews = data.crews;
                   Crew? selectedCrew;
                   for (final crew in crews) {
@@ -1118,12 +1138,14 @@ class _HoursStepper extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.enabled = true,
+    this.maxValue = 24,
   });
 
   final String label;
   final double value;
   final ValueChanged<double> onChanged;
   final bool enabled;
+  final double maxValue;
 
   @override
   Widget build(BuildContext context) {
@@ -1172,8 +1194,8 @@ class _HoursStepper extends StatelessWidget {
     );
   }
 
-  double _increment(double current) => (current + 0.5).clamp(0, 24);
-  double _decrement(double current) => (current - 0.5).clamp(0, 24);
+  double _increment(double current) => (current + 0.5).clamp(0, maxValue);
+  double _decrement(double current) => (current - 0.5).clamp(0, maxValue);
 }
 
 ImageProvider? _memberPhotoProvider(BuildContext context, int personId) {
@@ -1232,11 +1254,13 @@ class CrewAssignmentPage extends StatefulWidget {
     required this.partida,
     required this.crew,
     required this.workDate,
+    this.normalHourLimit,
   });
 
   final PlanPartida partida;
   final Crew crew;
   final DateTime workDate;
+  final double? normalHourLimit;
 
   @override
   State<CrewAssignmentPage> createState() => _CrewAssignmentPageState();
@@ -1435,6 +1459,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                                   label: 'Horas normales',
                                   value: _normalHours[member.id] ?? 0,
                                   enabled: !_submitting,
+                                  maxValue: widget.normalHourLimit ?? 24,
                                   onChanged: (value) => setState(() {
                                     _normalHours[member.id] = value;
                                   }),
@@ -1490,8 +1515,13 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
 }
 
 class _RegisterData {
-  _RegisterData({required this.phases, required this.crews});
+  _RegisterData({
+    required this.phases,
+    required this.crews,
+    required this.project,
+  });
 
   final List<PlanPhase> phases;
   final List<Crew> crews;
+  final ProjectDetail project;
 }
