@@ -260,7 +260,7 @@ class _CrewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CircleAvatar(
-            backgroundImage: _memberPhotoProvider(member.photoUrl),
+            backgroundImage: _memberPhotoProvider(context, member.id),
             radius: 28,
             child: member.photoUrl == null
                 ? Text(initials, style: theme.titleMedium)
@@ -436,9 +436,14 @@ class _CrewEmptyState extends StatelessWidget {
   }
 }
 
-ImageProvider? _memberPhotoProvider(String? url) {
-  if (url == null || url.isEmpty) {
+ImageProvider? _memberPhotoProvider(BuildContext context, int personId) {
+  final authState = context.read<AuthState>();
+  final token = authState.token;
+  if (token == null) {
     return null;
   }
-  return CachedNetworkImageProvider(url);
+  final url = 'https://api.codepass.lat/persons/$personId/photo';
+  return CachedNetworkImageProvider(url, headers: {
+    'Authorization': 'Bearer $token',
+  });
 }

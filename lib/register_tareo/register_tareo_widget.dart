@@ -1176,11 +1176,15 @@ class _HoursStepper extends StatelessWidget {
   double _decrement(double current) => (current - 0.5).clamp(0, 24);
 }
 
-ImageProvider? _memberPhotoProvider(String? url) {
-  if (url == null || url.isEmpty) {
+ImageProvider? _memberPhotoProvider(BuildContext context, int personId) {
+  final token = context.read<AuthState>().token;
+  if (token == null) {
     return null;
   }
-  return CachedNetworkImageProvider(url);
+  final url = 'https://api.codepass.lat/persons/$personId/photo';
+  return CachedNetworkImageProvider(url, headers: {
+    'Authorization': 'Bearer $token',
+  });
 }
 
 class _RegisterError extends StatelessWidget {
@@ -1389,7 +1393,7 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                               CircleAvatar(
                                 radius: 24,
                                 backgroundImage:
-                                    _memberPhotoProvider(member.photoUrl),
+                                    _memberPhotoProvider(context, member.id),
                                 child: member.photoUrl == null
                                     ? Text(
                                         member.fullName.isNotEmpty
