@@ -480,69 +480,36 @@ class _PhasePanel extends StatelessWidget {
         ),
       );
     }
-    return DefaultTabController(
-      length: phases.length,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Fases y partidas',
-            style: theme.titleMedium.override(
-              font: GoogleFonts.interTight(
-                fontWeight: FontWeight.w600,
-                fontStyle: theme.titleMedium.fontStyle,
-              ),
-              color: theme.primaryText,
-            ),
-          ),
-          const SizedBox(height: 8.0),
-          TabBar(
-            isScrollable: true,
-            labelStyle: theme.bodyMedium.override(
-              font: GoogleFonts.interTight(
-                fontWeight: FontWeight.w600,
-                fontStyle: theme.bodyMedium.fontStyle,
-              ),
-            ),
-            indicatorColor: theme.primarycolor,
-            tabs: [
-              for (final phase in phases)
-                Tab(text: phase.phaseName.isNotEmpty ? phase.phaseName : 'Fase'),
-            ],
-          ),
-          const SizedBox(height: 12.0),
-          Expanded(
-            child: TabBarView(
-              children: [
-                for (final phase in phases)
-                  _PhaseListView(phase: phase, onAssign: onAssign),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PhaseListView extends StatelessWidget {
-  const _PhaseListView({required this.phase, required this.onAssign});
-
-  final PlanPhase phase;
-  final void Function(PlanPartida partida) onAssign;
-
-  @override
-  Widget build(BuildContext context) {
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(0, 8.0, 0, 32.0),
-      itemCount: phase.partidas.length,
+      padding: const EdgeInsets.only(bottom: 24.0),
+      itemCount: phases.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12.0),
       itemBuilder: (context, index) {
-        final partida = phase.partidas[index];
-        return _PartidaTile(
-          partida: partida,
-          onAssign: onAssign,
-          level: 0,
+        final phase = phases[index];
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.card,
+            borderRadius: BorderRadius.circular(18.0),
+            border: Border.all(color: theme.border),
+          ),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              title: Text(
+                phase.phaseName,
+                style: theme.titleSmall,
+              ),
+              children: phase.partidas
+                  .map((partida) => _PartidaTile(
+                        partida: partida,
+                        onAssign: onAssign,
+                        level: 0,
+                      ))
+                  .toList(),
+            ),
+          ),
         );
       },
     );
