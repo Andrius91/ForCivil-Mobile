@@ -62,14 +62,22 @@ class PlanPhase {
   final List<PlanPartida> partidas;
 
   factory PlanPhase.fromJson(Map<String, dynamic> json) {
-    final partidas = (json['partidas'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(PlanPartida.fromJson)
-        .toList();
+    List<Map<String, dynamic>> _mapList(dynamic data) =>
+        data is List<dynamic>
+            ? data.whereType<Map<String, dynamic>>().toList()
+            : const [];
+
+    final partidasJson = <Map<String, dynamic>>[
+      ..._mapList(json['partidas']),
+      ..._mapList(json['children']),
+    ];
     return PlanPhase(
       phaseId: json['phaseId'] as int? ?? json['id'] as int? ?? 0,
-      phaseName: json['phaseName'] as String? ?? json['name'] as String? ?? '',
-      partidas: partidas,
+      phaseName: json['phaseName']?.toString() ??
+          json['name']?.toString() ??
+          json['phaseCode']?.toString() ??
+          'Fase',
+      partidas: partidasJson.map(PlanPartida.fromJson).toList(),
     );
   }
 }
@@ -94,18 +102,30 @@ class PlanPartida {
   final bool leaf;
 
   factory PlanPartida.fromJson(Map<String, dynamic> json) {
-    final children = (json['children'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(PlanPartida.fromJson)
-        .toList();
+    List<Map<String, dynamic>> _mapList(dynamic data) =>
+        data is List<dynamic>
+            ? data.whereType<Map<String, dynamic>>().toList()
+            : const [];
+
+    final childNodes = <Map<String, dynamic>>[
+      ..._mapList(json['children']),
+      ..._mapList(json['partidas']),
+    ];
+
+    final dynamic idValue = json['id'] ?? json['partidaId'];
+    final codeValue = json['code'] ?? json['partidaCode'] ?? json['codePc'];
+    final nameValue = json['name'] ?? json['partidaName'];
+    final unitValue = json['unit'] ?? json['unitName'];
+    final metricValue = json['metric'] ?? json['plannedHh'];
+
     return PlanPartida(
-      id: json['id'] as int,
-      code: json['code']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      unit: json['unit']?.toString(),
-      metric: (json['metric'] as num?)?.toDouble(),
-      children: children,
-      leaf: json['leaf'] as bool? ?? children.isEmpty,
+      id: (idValue is int) ? idValue : int.tryParse(idValue?.toString() ?? '0') ?? 0,
+      code: codeValue?.toString() ?? '',
+      name: nameValue?.toString() ?? '',
+      unit: unitValue?.toString(),
+      metric: (metricValue as num?)?.toDouble(),
+      children: childNodes.map(PlanPartida.fromJson).toList(),
+      leaf: json['leaf'] as bool? ?? childNodes.isEmpty,
     );
   }
 }

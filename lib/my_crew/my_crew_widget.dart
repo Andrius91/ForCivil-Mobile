@@ -211,11 +211,6 @@ class _CrewTeamTileState extends State<_CrewTeamTile> {
             ],
           ),
           children: [
-            if (crew.partidas.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 16.0),
-                child: _PartidasChips(partidas: crew.partidas),
-              ),
             if (crew.members.isEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 16.0),
@@ -315,75 +310,6 @@ class _CrewCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _PartidasChips extends StatelessWidget {
-  const _PartidasChips({required this.partidas});
-
-  final List<CrewPartida> partidas;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FlutterFlowTheme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Partidas asignadas',
-          style: theme.labelLarge.override(
-            font: GoogleFonts.interTight(
-              fontWeight: FontWeight.w600,
-              fontStyle: theme.labelLarge.fontStyle,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8.0),
-        Wrap(
-          spacing: 8.0,
-          runSpacing: 8.0,
-          children: partidas
-              .map(
-                (partida) => Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0, vertical: 8.0),
-                  decoration: BoxDecoration(
-                    color: theme.secondaryBackground,
-                    borderRadius: BorderRadius.circular(16.0),
-                    border: Border.all(color: theme.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        partida.code,
-                        style: theme.labelMedium.override(
-                          font: GoogleFonts.inter(),
-                          color: theme.mutedforeground,
-                        ),
-                      ),
-                      const SizedBox(height: 4.0),
-                      Text(
-                        partida.name,
-                        style: theme.bodyMedium,
-                      ),
-                      if (partida.unit != null || partida.metric != null)
-                        Text(
-                          '${partida.metric?.toString() ?? '-'} ${partida.unit ?? ''}'.trim(),
-                          style: theme.bodySmall.override(
-                            font: GoogleFonts.inter(),
-                            color: theme.mutedforeground,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
-        ),
-      ],
     );
   }
 }
