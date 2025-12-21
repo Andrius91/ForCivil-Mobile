@@ -232,19 +232,19 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                     );
                   }
 
+                  final crew = selectedCrew!;
                   final filteredPhases =
-                      _filterPhasesForCrew(data.phases, selectedCrew);
+                      _filterPhasesForCrew(data.phases, crew);
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth > 960;
                       final phasePanel = _PhasePanel(
                         phases: filteredPhases,
-                        onAssign: (partida) =>
-                            _openAssignment(partida, selectedCrew),
+                        onAssign: (partida) => _openAssignment(partida, crew),
                       );
                       final crewHeader = _SelectedCrewHeader(
-                        crew: selectedCrew,
+                        crew: crew,
                         onChange: () => setState(() => _selectedCrewId = null),
                       );
 
