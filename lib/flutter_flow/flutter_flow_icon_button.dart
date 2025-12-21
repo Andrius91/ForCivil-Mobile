@@ -87,7 +87,8 @@ class _FlutterFlowIconButtonState extends State<FlutterFlowIconButton> {
         (states) {
           if (states.contains(MaterialState.hovered)) {
             return RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(widget.borderRadius ?? 0),
+              borderRadius:
+                  BorderRadius.circular(widget.borderRadius ?? 12.0),
               side: BorderSide(
                 color: widget.hoverBorderColor ??
                     widget.borderColor ??
@@ -99,13 +100,14 @@ class _FlutterFlowIconButtonState extends State<FlutterFlowIconButton> {
           if (states.contains(WidgetState.focused) &&
               widget.focusBorderSide != null) {
             return RoundedRectangleBorder(
-              borderRadius:
-                  widget.focusBorderRadius ?? BorderRadius.circular(8),
+              borderRadius: widget.focusBorderRadius ??
+                  BorderRadius.circular(widget.borderRadius ?? 12.0),
               side: widget.focusBorderSide!,
             );
           }
           return RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(widget.borderRadius ?? 0),
+            borderRadius:
+                BorderRadius.circular(widget.borderRadius ?? 12.0),
             side: BorderSide(
               color: widget.borderColor ?? Colors.transparent,
               width: widget.borderWidth ?? 0,

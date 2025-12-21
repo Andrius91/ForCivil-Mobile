@@ -32,23 +32,39 @@ class ForCivilLayout extends StatelessWidget {
       drawer: showDrawer ? const _ForCivilDrawer() : null,
       appBar: AppBar(
         backgroundColor: theme.primaryBackground,
+        surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
         elevation: 0,
+        toolbarHeight: 72,
         title: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: theme.primarycolor,
-                borderRadius: BorderRadius.circular(10),
+                gradient: LinearGradient(
+                  colors: [theme.primarycolor, theme.tertiary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.primarycolor.withOpacity(0.25),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
               ),
-              child:
-                  const Icon(Icons.construction, color: Colors.white, size: 22),
+              child: const Icon(Icons.layers, color: Colors.white, size: 22),
             ),
             Text(
               'ForCivil',
-              style: theme.titleLarge,
+              style: theme.titleLarge.override(
+                fontFamily: theme.titleLargeFamily,
+                color: theme.primaryText,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ].divide(const SizedBox(width: 12)),
         ),
@@ -57,7 +73,7 @@ class ForCivilLayout extends StatelessWidget {
             padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
             child: FlutterFlowIconButton(
               borderColor: theme.border,
-              borderRadius: 12,
+              borderRadius: 14,
               borderWidth: 1,
               buttonSize: 40,
               fillColor: theme.secondaryBackground,
@@ -85,6 +101,7 @@ class _ForCivilDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
     return Drawer(
+      backgroundColor: theme.secondaryBackground,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,7 +111,13 @@ class _ForCivilDrawer extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('ForCivil Builder', style: theme.headlineSmall),
+                  Text(
+                    'ForCivil Builder',
+                    style: theme.headlineSmall.override(
+                      fontFamily: theme.headlineSmallFamily,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   Text(
                     'Gestiona tus proyectos',
                     style: theme.bodyMedium.override(
@@ -104,7 +127,7 @@ class _ForCivilDrawer extends StatelessWidget {
                 ].divide(const SizedBox(height: 4)),
               ),
             ),
-            const Divider(height: 1),
+            Divider(height: 1, color: theme.border),
             _DrawerItem(
               label: 'Panel principal',
               icon: Icons.dashboard_customize_rounded,
@@ -143,8 +166,22 @@ class _DrawerItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
     return ListTile(
-      leading: Icon(icon, color: theme.primarycolor),
-      title: Text(label, style: theme.titleMedium),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: theme.accent1,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: theme.primarycolor, size: 22),
+      ),
+      title: Text(
+        label,
+        style: theme.titleMedium.override(
+          fontFamily: theme.titleMediumFamily,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       onTap: onTap,
     );
   }

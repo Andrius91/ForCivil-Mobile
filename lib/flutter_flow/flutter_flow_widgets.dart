@@ -129,13 +129,14 @@ class _FFButtonWidgetState extends State<FFButtonWidget> {
             : () => widget.onPressed!())
         : null;
 
+    final defaultRadius = BorderRadius.circular(12.0);
     ButtonStyle style = ButtonStyle(
       shape: MaterialStateProperty.resolveWith<OutlinedBorder>((states) {
         if (states.contains(MaterialState.hovered) &&
             widget.options.hoverBorderSide != null) {
           return RoundedRectangleBorder(
             borderRadius:
-                widget.options.borderRadius ?? BorderRadius.circular(8),
+                widget.options.borderRadius ?? defaultRadius,
             side: widget.options.hoverBorderSide!,
           );
         }
@@ -144,12 +145,12 @@ class _FFButtonWidgetState extends State<FFButtonWidget> {
           return RoundedRectangleBorder(
             borderRadius: widget.options.focusBorderRadius ??
                 widget.options.borderRadius ??
-                BorderRadius.circular(8),
+                defaultRadius,
             side: widget.options.focusBorderSide!,
           );
         }
         return RoundedRectangleBorder(
-          borderRadius: widget.options.borderRadius ?? BorderRadius.circular(8),
+          borderRadius: widget.options.borderRadius ?? defaultRadius,
           side: widget.options.borderSide ?? BorderSide.none,
         );
       }),
@@ -183,14 +184,14 @@ class _FFButtonWidgetState extends State<FFButtonWidget> {
       }),
       padding: MaterialStateProperty.all(
         widget.options.padding ??
-            const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+            const EdgeInsets.symmetric(horizontal: 24.0, vertical: 14.0),
       ),
       elevation: MaterialStateProperty.resolveWith<double?>((states) {
         if (states.contains(MaterialState.hovered) &&
             widget.options.hoverElevation != null) {
           return widget.options.hoverElevation!;
         }
-        return widget.options.elevation ?? 2.0;
+        return widget.options.elevation ?? 0.0;
       }),
       iconColor: MaterialStateProperty.resolveWith<Color?>((states) {
         if (states.contains(MaterialState.disabled) &&
