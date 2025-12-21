@@ -1,0 +1,174 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+
+import 'auth_service.dart' show ApiException;
+
+class AttendanceService {
+  AttendanceService({http.Client? client, String baseUrl = _defaultBaseUrl})
+      : _client = client ?? http.Client(),
+        _baseUrl = baseUrl;
+
+  static const _defaultBaseUrl = 'https://api.codepass.lat';
+
+  final http.Client _client;
+  final String _baseUrl;
+  final DateFormat _dateFormat = DateFormat('yyyy-MM-dd');
+  final DateFormat _timeFormat = DateFormat('HH:mm');
+
+  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+
+  Future<List<AttendanceRecord>> fetchCrewAttendance({
+    required String token,
+    required int crewId,
+    required DateTime date,
+  }) async {
+    final dateString = _dateFormat.format(date);
+    final response = await _client.get(
+      _uri('/attendance/crew/$crewId').replace(queryParameters: {
+        'date': dateString,
+      }),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    final body = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+    if (response.statusCode != 200) {
+      final message = body is Map<String, dynamic> ? body['message'] : null;
+      throw ApiException(
+        message?.toString() ?? 'Error al obtener la asistencia',
+        statusCode: response.statusCode,
+      );
+    }
+    if (body is! Map<String, dynamic> || body['success'] != true) {
+      throw ApiException(body?['message']?.toString() ?? 'Respuesta inválida');
+    }
+    final data = body['data'] as List<dynamic>? ?? const [];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map((json) => AttendanceRecord.fromJson(json))
+        .toList();
+  }
+
+  Future<AttendanceResponse> registerAttendance({
+    required String token,
+    required int projectId,
+    required int crewId,
+    required String dni,
+    required bool isCheckIn,
+    required DateTime timestamp,
+  }) async {
+    final dateString = _dateFormat.format(timestamp);
+    final timeString = _timeFormat.format(timestamp);
+
+    final entry = <String, dynamic>{
+      'dni': dni,
+      'present': true,
+      if (isCheckIn) 'checkInTime': timeString,
+      if (!isCheckIn) 'checkOutTime': timeString,
+    };
+
+    final payload = <String, dynamic>{
+      'projectId': projectId,
+      'crewId': crewId,
+      'date': dateString,
+      'entries': [entry],
+    };
+
+    final response = await _client.post(
+      _uri('/attendance'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
+    );
+
+    final body = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+    if (response.statusCode != 200) {
+      final message = body is Map<String, dynamic> ? body['message'] : null;
+      throw ApiException(
+        message?.toString() ?? 'Error al registrar asistencia',
+        statusCode: response.statusCode,
+      );
+    }
+    if (body is! Map<String, dynamic> || body['success'] != true) {
+      throw ApiException(body?['message']?.toString() ?? 'Respuesta inválida');
+    }
+    final data = body['data'] as Map<String, dynamic>?;
+    return AttendanceResponse.fromJson(data ?? const {});
+  }
+}
+
+class AttendanceResponse {
+  AttendanceResponse({
+    required this.projectId,
+    required this.crewId,
+    required this.records,
+    required this.date,
+  });
+
+  final int? projectId;
+  final int? crewId;
+  final DateTime? date;
+  final List<AttendanceRecord> records;
+
+  factory AttendanceResponse.fromJson(Map<String, dynamic> json) {
+    final records = (json['records'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AttendanceRecord.fromJson)
+        .toList();
+    return AttendanceResponse(
+      projectId: json['projectId'] as int?,
+      crewId: json['crewId'] as int?,
+      date: DateTime.tryParse(json['date']?.toString() ?? ''),
+      records: records,
+    );
+  }
+}
+
+class AttendanceRecord {
+  AttendanceRecord({
+    required this.personId,
+    required this.dni,
+    required this.fullName,
+    required this.present,
+    required this.date,
+    required this.checkInTime,
+    required this.checkOutTime,
+  });
+
+  final int? personId;
+  final String dni;
+  final String fullName;
+  final bool present;
+  final DateTime? date;
+  final DateTime? checkInTime;
+  final DateTime? checkOutTime;
+
+  factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
+    final dateString = json['date']?.toString();
+    return AttendanceRecord(
+      personId: json['personId'] as int?,
+      dni: json['dni']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? '',
+      present: json['present'] as bool? ?? true,
+      date: DateTime.tryParse(dateString ?? ''),
+      checkInTime: _parseDateTime(dateString, json['checkInTime']?.toString()),
+      checkOutTime: _parseDateTime(dateString, json['checkOutTime']?.toString()),
+    );
+  }
+
+  static DateTime? _parseDateTime(String? date, String? time) {
+    if (date == null || time == null || date.isEmpty || time.isEmpty) {
+      return null;
+    }
+    final normalized = time.length == 5 ? '${time}:00' : time;
+    final iso = '${date}T$normalized';
+    return DateTime.tryParse(iso);
+  }
+}

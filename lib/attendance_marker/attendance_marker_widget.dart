@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:ff_theme/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +9,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 
+import '/backend/api/attendance_service.dart';
+import '/backend/api/auth_service.dart';
 import '/backend/api/auth_state.dart';
+import '/backend/api/crew_service.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/widgets/for_civil_layout.dart';
 
@@ -23,11 +27,18 @@ class AttendanceMarkerWidget extends StatefulWidget {
 }
 
 class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
+  final AttendanceService _attendanceService = AttendanceService();
+  final CrewService _crewService = CrewService();
+
   late DateTime _now;
   Timer? _timer;
   String _mode = 'INGRESO';
   String? _message;
-  final List<_AttendanceRecord> _history = [];
+  bool _dataInitialized = false;
+  bool _isLoadingData = false;
+  String? _loadError;
+  Crew? _selectedCrew;
+  List<AttendanceRecord> _records = [];
 
   @override
   void initState() {
@@ -41,12 +52,82 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_dataInitialized) {
+      _dataInitialized = true;
+      _loadCrewAndRecords();
+    }
+  }
+
+  Future<void> _loadCrewAndRecords() async {
+    setState(() {
+      _isLoadingData = true;
+      _loadError = null;
+    });
+    try {
+      final authState = context.read<AuthState>();
+      final token = authState.token;
+      final profile = authState.profile;
+      final project = authState.selectedProject;
+
+      if (token == null || profile == null || project == null) {
+        throw ApiException(
+            'Inicia sesión y selecciona un proyecto para usar el marcador');
+      }
+
+      final crews = await _crewService.fetchCrews(
+        userId: profile.id,
+        projectId: project.projectId,
+        token: token,
+      );
+
+      if (crews.isEmpty) {
+        throw ApiException('No se encontraron cuadrillas disponibles');
+      }
+
+      final crew = crews.first;
+      final records = await _attendanceService.fetchCrewAttendance(
+        token: token,
+        crewId: crew.id,
+        date: DateTime.now(),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _selectedCrew = crew;
+        _records = records;
+      });
+    } on ApiException catch (e) {
+      setState(() => _loadError = e.message);
+    } catch (_) {
+      setState(() => _loadError = 'No se pudo cargar la asistencia.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingData = false);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   Future<void> _startScan(String mode) async {
+    if (_selectedCrew == null || _isLoadingData) {
+      _showMessage('Aún no hay una cuadrilla disponible para registrar.');
+      return;
+    }
+
     setState(() {
       _mode = mode;
       _message = null;
@@ -56,21 +137,83 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       MaterialPageRoute(
         builder: (_) => _ScannerPage(
           mode: mode,
-          onRegistered: _handleScanResult,
+          onRegister: (scanMode, payload) => _handleScan(scanMode, payload),
         ),
       ),
     );
   }
 
-  void _handleScanResult(String mode, DateTime timestamp) {
-    final formattedTime = dateTimeFormat('HH:mm:ss', timestamp, locale: 'es');
-    setState(() {
-      _message = '$mode registrado a las $formattedTime';
-      _history.insert(0, _AttendanceRecord(mode: mode, timestamp: timestamp));
-      if (_history.length > 10) {
-        _history.removeLast();
+  Future<bool> _handleScan(String mode, String payload) async {
+    final dni = _decodeDni(payload);
+    if (dni == null) {
+      _showMessage('No se leyó un DNI válido en el código escaneado.');
+      return false;
+    }
+    final crew = _selectedCrew;
+    final authState = context.read<AuthState>();
+    final token = authState.token;
+    final project = authState.selectedProject;
+
+    if (crew == null || token == null || project == null) {
+      _showMessage('Debes iniciar sesión nuevamente.');
+      return false;
+    }
+
+    final timestamp = DateTime.now();
+    try {
+      await _attendanceService.registerAttendance(
+        token: token,
+        projectId: project.projectId,
+        crewId: crew.id,
+        dni: dni,
+        isCheckIn: mode == 'INGRESO',
+        timestamp: timestamp,
+      );
+
+      final records = await _attendanceService.fetchCrewAttendance(
+        token: token,
+        crewId: crew.id,
+        date: timestamp,
+      );
+
+      if (!mounted) {
+        return true;
       }
-    });
+
+      setState(() {
+        _records = records;
+        final formattedTime =
+            dateTimeFormat('HH:mm:ss', timestamp, locale: 'es');
+        _message = '$mode registrado para DNI $dni a las $formattedTime';
+      });
+      return true;
+    } on ApiException catch (e) {
+      _showMessage(e.message);
+    } catch (_) {
+      _showMessage('No se pudo registrar la asistencia. Inténtalo nuevamente.');
+    }
+    return false;
+  }
+
+  String? _decodeDni(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        for (final key in ['dni', 'documento', 'doc', 'documentId']) {
+          if (decoded[key] != null) {
+            return decoded[key].toString();
+          }
+        }
+      }
+    } catch (_) {
+      // ignore json errors
+    }
+    final match = RegExp(r'(\d{8,12})').firstMatch(trimmed);
+    return match?.group(0) ?? trimmed;
   }
 
   @override
@@ -226,10 +369,11 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   }
 
   Widget _buildActionButtons(FlutterFlowTheme theme) {
+    final canScan = !_isLoadingData && _selectedCrew != null;
     return Column(
       children: [
         ElevatedButton(
-          onPressed: () => _startScan('INGRESO'),
+          onPressed: canScan ? () => _startScan('INGRESO') : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: theme.primarycolor,
             padding: const EdgeInsets.symmetric(vertical: 26.0),
@@ -255,7 +399,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         ),
         const SizedBox(height: 14.0),
         OutlinedButton(
-          onPressed: () => _startScan('SALIDA'),
+          onPressed: canScan ? () => _startScan('SALIDA') : null,
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 26.0),
             shape: RoundedRectangleBorder(
@@ -311,7 +455,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   }
 
   Widget _buildHistorySection(FlutterFlowTheme theme) {
-    final entries = _history.take(5).toList();
+    final entries = _records;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16.0),
@@ -332,7 +476,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Historial reciente',
+                  'Historial del día',
                   style: theme.titleSmall.override(
                     font: GoogleFonts.interTight(
                       fontWeight: FontWeight.w600,
@@ -341,8 +485,20 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
                   ),
                 ),
                 const SizedBox(height: 12.0),
-                ...entries.map(
-                  (entry) => Padding(
+                ...entries.map((record) {
+                  final color = _modeColor(
+                    record.checkOutTime != null ? 'SALIDA' : 'INGRESO',
+                    theme,
+                  );
+                  final ingreso = record.checkInTime != null
+                      ? dateTimeFormat('HH:mm', record.checkInTime!,
+                          locale: 'es')
+                      : '--';
+                  final salida = record.checkOutTime != null
+                      ? dateTimeFormat('HH:mm', record.checkOutTime!,
+                          locale: 'es')
+                      : '--';
+                  return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Row(
                       children: [
@@ -350,7 +506,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: _modeColor(entry.mode, theme),
+                            color: color,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -360,15 +516,13 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                entry.mode,
+                                record.fullName.isNotEmpty
+                                    ? record.fullName
+                                    : 'DNI ${record.dni}',
                                 style: theme.bodyMedium,
                               ),
                               Text(
-                                dateTimeFormat(
-                                  'd MMM y · HH:mm:ss',
-                                  entry.timestamp,
-                                  locale: 'es',
-                                ),
+                                'Ingreso: $ingreso · Salida: $salida',
                                 style: theme.labelMedium.override(
                                   font: GoogleFonts.inter(),
                                   color: theme.mutedforeground,
@@ -379,14 +533,91 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
                         ),
                       ],
                     ),
-                  ),
-                ),
+                  );
+                }),
               ],
             ),
     );
   }
 
   Widget _buildInfoPanel(FlutterFlowTheme theme) {
+    final crew = _selectedCrew;
+    Widget child;
+    if (_isLoadingData) {
+      child = const Center(child: CircularProgressIndicator());
+    } else if (_loadError != null) {
+      child = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: theme.error),
+          const SizedBox(height: 12.0),
+          Text(
+            _loadError!,
+            textAlign: TextAlign.center,
+            style: theme.bodyMedium,
+          ),
+          const SizedBox(height: 12.0),
+          ElevatedButton(
+            onPressed: _loadCrewAndRecords,
+            child: const Text('Reintentar'),
+          ),
+        ],
+      );
+    } else if (crew == null) {
+      child = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.info_outline, size: 48, color: theme.mutedforeground),
+          const SizedBox(height: 12.0),
+          Text(
+            'Selecciona un proyecto para vincular una cuadrilla.',
+            textAlign: TextAlign.center,
+            style: theme.bodyMedium,
+          ),
+        ],
+      );
+    } else {
+      final dateLabel = dateTimeFormat('EEEE d MMMM', _now, locale: 'es');
+      child = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cuadrilla asignada',
+            style: theme.titleMedium,
+          ),
+          const SizedBox(height: 8.0),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: theme.primarycolor.withOpacity(0.1),
+              child: Icon(Icons.groups, color: theme.primarycolor),
+            ),
+            title: Text(crew.name, style: theme.titleMedium),
+            subtitle: Text(
+              'Integrantes: ${crew.members.length}\nCapataz: ${crew.foremanName}',
+              style: theme.bodySmall.override(
+                font: GoogleFonts.inter(),
+                color: theme.mutedforeground,
+              ),
+            ),
+          ),
+          const Divider(),
+          Text(
+            'Este dispositivo enviará registros de asistencia del $dateLabel.',
+            style: theme.bodySmall.override(
+              font: GoogleFonts.inter(),
+              color: theme.mutedforeground,
+            ),
+          ),
+          const SizedBox(height: 8.0),
+          Text(
+            'Usa los botones para marcar ingreso o salida y escanear el código QR del colaborador.',
+            style: theme.bodyMedium,
+          ),
+        ],
+      );
+    }
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -395,25 +626,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         border: Border.all(color: theme.border),
       ),
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.qr_code_scanner,
-            size: 64,
-            color: theme.mutedforeground,
-          ),
-          const SizedBox(height: 10.0),
-          Text(
-            'Usa los botones para abrir la cámara y escanear un código QR',
-            textAlign: TextAlign.center,
-            style: theme.bodyLarge.override(
-              font: GoogleFonts.inter(),
-              color: theme.primaryText,
-            ),
-          ),
-        ],
-      ),
+      child: child,
     );
   }
 
@@ -425,11 +638,11 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
 class _ScannerPage extends StatefulWidget {
   const _ScannerPage({
     required this.mode,
-    required this.onRegistered,
+    required this.onRegister,
   });
 
   final String mode;
-  final void Function(String mode, DateTime timestamp) onRegistered;
+  final Future<bool> Function(String mode, String payload) onRegister;
 
   @override
   State<_ScannerPage> createState() => _ScannerPageState();
@@ -461,12 +674,37 @@ class _ScannerPageState extends State<_ScannerPage> {
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (_handled) return;
+    final payload = _payloadFromCapture(capture);
+    if (payload == null) {
+      _showScanMessage('No se pudo leer el código. Acércalo nuevamente.');
+      return;
+    }
     _handled = true;
-    final timestamp = DateTime.now();
-    widget.onRegistered(widget.mode, timestamp);
+    final success = await widget.onRegister(widget.mode, payload);
+    if (!mounted) return;
+    if (!success) {
+      _handled = false;
+      return;
+    }
     HapticFeedback.mediumImpact();
+    _playSound();
+    setState(() {
+      _showSuccess = true;
+    });
+
+    _successTimer?.cancel();
+    _successTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() {
+        _showSuccess = false;
+        _handled = false;
+      });
+    });
+  }
+
+  void _playSound() {
     if (widget.mode == 'INGRESO') {
       _player.play(
         android: AndroidSounds.notification,
@@ -484,18 +722,23 @@ class _ScannerPageState extends State<_ScannerPage> {
         asAlarm: true,
       );
     }
-    setState(() {
-      _showSuccess = true;
-    });
+  }
 
-    _successTimer?.cancel();
-    _successTimer = Timer(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      setState(() {
-        _showSuccess = false;
-        _handled = false;
-      });
-    });
+  String? _payloadFromCapture(BarcodeCapture capture) {
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue?.trim();
+      if (raw != null && raw.isNotEmpty) {
+        return raw;
+      }
+    }
+    return null;
+  }
+
+  void _showScanMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -573,11 +816,4 @@ class _ScannerPageState extends State<_ScannerPage> {
       ),
     );
   }
-}
-
-class _AttendanceRecord {
-  _AttendanceRecord({required this.mode, required this.timestamp});
-
-  final String mode;
-  final DateTime timestamp;
 }
