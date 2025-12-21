@@ -116,8 +116,6 @@ class _MenuWidgetState extends State<MenuWidget> {
                     return _MenuTile(data: tiles[index]);
                   },
                 ),
-                const SizedBox(height: 24.0),
-                _DailySummaryCard(theme: theme),
                 const SizedBox(height: 48.0),
               ],
             ),
@@ -233,120 +231,6 @@ class _MenuTileState extends State<_MenuTile> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _DailySummaryCard extends StatelessWidget {
-  const _DailySummaryCard({required this.theme});
-
-  final FlutterFlowTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(24.0),
-        border: Border.all(color: theme.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 24.0,
-            offset: Offset(0.0, 12.0),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Resumen del día',
-                  style: theme.titleLarge.override(
-                    font: GoogleFonts.interTight(
-                      fontWeight: FontWeight.w600,
-                      fontStyle: theme.titleLarge.fontStyle,
-                    ),
-                    color: theme.primaryText,
-                  ),
-                ),
-                Icon(Icons.calendar_today_outlined,
-                    color: theme.mutedforeground, size: 20.0),
-              ],
-            ),
-            const SizedBox(height: 20.0),
-            Row(
-              children: const [
-                _SummaryMetric(
-                  value: '24',
-                  label: 'Trabajadores',
-                  valueColor: Color(0xFF2A4F8B),
-                ),
-                _SummaryMetric(
-                  value: '8.5h',
-                  label: 'Horas promedio',
-                  valueColor: Color(0xFFF2C04D),
-                ),
-                _SummaryMetric(
-                  value: '95%',
-                  label: 'Asistencia',
-                  valueColor: Color(0xFF5BC3D5),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryMetric extends StatelessWidget {
-  const _SummaryMetric({
-    required this.value,
-    required this.label,
-    required this.valueColor,
-  });
-
-  final String value;
-  final String label;
-  final Color valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FlutterFlowTheme.of(context);
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: theme.headlineMedium.override(
-              font: GoogleFonts.interTight(
-                fontWeight: FontWeight.w700,
-                fontStyle: theme.headlineMedium.fontStyle,
-              ),
-              color: valueColor,
-            ),
-          ),
-          Text(
-            label,
-            style: theme.bodyMedium.override(
-              font: GoogleFonts.inter(
-                fontWeight: theme.bodyMedium.fontWeight,
-                fontStyle: theme.bodyMedium.fontStyle,
-              ),
-              color: theme.mutedforeground,
-            ),
-          ),
-        ],
       ),
     );
   }
