@@ -170,14 +170,23 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         _showMessage('Debes iniciar sesión nuevamente.');
         return false;
       }
-      await _attendanceService.registerAttendance(
-        token: freshToken,
-        projectId: project.projectId,
-        crewId: crew.id,
-        dni: dni,
-        isCheckIn: mode == 'INGRESO',
-        timestamp: timestamp,
-      );
+      if (mode == 'INGRESO') {
+        await _attendanceService.registerCheckIn(
+          token: freshToken,
+          projectId: project.projectId,
+          crewId: crew.id,
+          dni: dni,
+          timestamp: timestamp,
+        );
+      } else {
+        await _attendanceService.registerCheckOut(
+          token: freshToken,
+          projectId: project.projectId,
+          crewId: crew.id,
+          dni: dni,
+          timestamp: timestamp,
+        );
+      }
 
       final records = await _attendanceService.fetchCrewAttendance(
         token: freshToken,

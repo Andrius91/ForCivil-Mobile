@@ -55,33 +55,57 @@ class AttendanceService {
         .toList();
   }
 
-  Future<AttendanceResponse> registerAttendance({
+  Future<AttendanceRecord> registerCheckIn({
     required String token,
     required int projectId,
     required int crewId,
     required String dni,
-    required bool isCheckIn,
     required DateTime timestamp,
   }) async {
     final dateString = _dateFormat.format(timestamp);
     final timeString = _timeFormat.format(timestamp);
+    return _postAttendance(
+      token: token,
+      path: '/attendance/check-in',
+      payload: {
+        'projectId': projectId,
+        'crewId': crewId,
+        'dni': dni,
+        'date': dateString,
+        'checkInTime': timeString,
+      },
+    );
+  }
 
-    final entry = <String, dynamic>{
-      'dni': dni,
-      'present': true,
-      if (isCheckIn) 'checkInTime': timeString,
-      if (!isCheckIn) 'checkOutTime': timeString,
-    };
+  Future<AttendanceRecord> registerCheckOut({
+    required String token,
+    required int projectId,
+    required int crewId,
+    required String dni,
+    required DateTime timestamp,
+  }) async {
+    final dateString = _dateFormat.format(timestamp);
+    final timeString = _timeFormat.format(timestamp);
+    return _postAttendance(
+      token: token,
+      path: '/attendance/check-out',
+      payload: {
+        'projectId': projectId,
+        'crewId': crewId,
+        'dni': dni,
+        'date': dateString,
+        'checkOutTime': timeString,
+      },
+    );
+  }
 
-    final payload = <String, dynamic>{
-      'projectId': projectId,
-      'crewId': crewId,
-      'date': dateString,
-      'entries': [entry],
-    };
-
+  Future<AttendanceRecord> _postAttendance({
+    required String token,
+    required String path,
+    required Map<String, dynamic> payload,
+  }) async {
     final response = await _client.post(
-      _uri('/attendance'),
+      _uri(path),
       headers: {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
@@ -101,35 +125,11 @@ class AttendanceService {
     if (body is! Map<String, dynamic> || body['success'] != true) {
       throw ApiException(body?['message']?.toString() ?? 'Respuesta inválida');
     }
-    final data = body['data'] as Map<String, dynamic>?;
-    return AttendanceResponse.fromJson(data ?? const {});
-  }
-}
-
-class AttendanceResponse {
-  AttendanceResponse({
-    required this.projectId,
-    required this.crewId,
-    required this.records,
-    required this.date,
-  });
-
-  final int? projectId;
-  final int? crewId;
-  final DateTime? date;
-  final List<AttendanceRecord> records;
-
-  factory AttendanceResponse.fromJson(Map<String, dynamic> json) {
-    final records = (json['records'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(AttendanceRecord.fromJson)
-        .toList();
-    return AttendanceResponse(
-      projectId: json['projectId'] as int?,
-      crewId: json['crewId'] as int?,
-      date: DateTime.tryParse(json['date']?.toString() ?? ''),
-      records: records,
-    );
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw ApiException('Respuesta inválida');
+    }
+    return AttendanceRecord.fromJson(data);
   }
 }
 
