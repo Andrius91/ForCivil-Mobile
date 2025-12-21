@@ -118,6 +118,20 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
   Future<void> _openAssignment(PlanPartida partida, Crew crew) async {
     final normalLimit = _projectDetail?.limitForDate(_selectedDate);
+    final remainingPerMember = <int, double>{};
+    if (normalLimit != null) {
+      final pendingEntries = _pendingEntries[crew.id] ?? const [];
+      final used = <int, double>{};
+      for (final entry in pendingEntries) {
+        used.update(entry.memberId, (value) => value + entry.hoursRegular,
+            ifAbsent: () => entry.hoursRegular);
+      }
+      for (final member in crew.members) {
+        final usedHours = used[member.id] ?? 0;
+        remainingPerMember[member.id] =
+            (normalLimit - usedHours).clamp(0, normalLimit);
+      }
+    }
 
     final result = await Navigator.of(context).push<_AssignmentResult>(
       MaterialPageRoute(
@@ -126,6 +140,9 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
           crew: crew,
           workDate: _selectedDate,
           normalHourLimit: normalLimit,
+          remainingNormalHours: remainingPerMember.isEmpty
+              ? null
+              : remainingPerMember,
         ),
       ),
     );
@@ -893,6 +910,7 @@ class _PendingEntry {
   final String partidaName;
   final double hoursRegular;
   final double hoursExtra;
+  double get totalHours => hoursRegular + hoursExtra;
 }
 
 class _PendingEntriesDetail extends StatelessWidget {
@@ -1255,12 +1273,14 @@ class CrewAssignmentPage extends StatefulWidget {
     required this.crew,
     required this.workDate,
     this.normalHourLimit,
+    this.remainingNormalHours,
   });
 
   final PlanPartida partida;
   final Crew crew;
   final DateTime workDate;
   final double? normalHourLimit;
+  final Map<int, double>? remainingNormalHours;
 
   @override
   State<CrewAssignmentPage> createState() => _CrewAssignmentPageState();
@@ -1459,7 +1479,8 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                                   label: 'Horas normales',
                                   value: _normalHours[member.id] ?? 0,
                                   enabled: !_submitting,
-                                  maxValue: widget.normalHourLimit ?? 24,
+                                  maxValue: widget.remainingNormalHours?[member.id] ??
+                                      widget.normalHourLimit ?? 24,
                                   onChanged: (value) => setState(() {
                                     _normalHours[member.id] = value;
                                   }),
