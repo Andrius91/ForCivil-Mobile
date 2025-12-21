@@ -21,6 +21,7 @@ class AttendanceService {
 
   Future<List<AttendanceRecord>> fetchCrewAttendance({
     required String token,
+    required int projectId,
     required int crewId,
     required DateTime date,
   }) async {
@@ -32,6 +33,7 @@ class AttendanceService {
       headers: {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
+        'X-Project-Id': projectId.toString(),
       },
     );
 

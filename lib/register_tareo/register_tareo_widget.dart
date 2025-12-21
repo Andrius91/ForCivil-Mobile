@@ -167,9 +167,10 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     final authState = context.read<AuthState>();
     await authState.ensureValidToken();
     final token = authState.token;
-    if (token == null) {
+    final project = authState.selectedProject;
+    if (token == null || project == null) {
       setState(() {
-        _attendanceError = 'Debes iniciar sesión nuevamente.';
+        _attendanceError = 'Debes iniciar sesión y seleccionar un proyecto.';
         _attendanceByMember = {};
         _attendanceReady = false;
         _attendanceCrewId = null;
@@ -187,6 +188,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
     try {
       final records = await _attendanceService.fetchCrewAttendance(
         token: token,
+        projectId: project.projectId,
         crewId: crewId,
         date: date,
       );

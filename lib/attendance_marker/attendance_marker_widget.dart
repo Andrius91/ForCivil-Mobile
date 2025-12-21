@@ -91,6 +91,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       final crew = crews.first;
       final records = await _attendanceService.fetchCrewAttendance(
         token: token,
+        projectId: project.projectId,
         crewId: crew.id,
         date: _selectedDate,
       );
@@ -194,6 +195,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
 
       final records = await _attendanceService.fetchCrewAttendance(
         token: freshToken,
+        projectId: project.projectId,
         crewId: crew.id,
         date: timestamp,
       );
