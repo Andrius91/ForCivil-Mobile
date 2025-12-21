@@ -380,13 +380,14 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
 
                   if (selectedCrew == null || !_selectionConfirmed) {
                     return _InitialSelectionStep(
-                      dateSelector: dateSelector,
+                      date: _selectedDate,
                       crews: crews,
                       selectedCrew: selectedCrew,
                       onSelectCrew: (crew) => setState(() {
                         _selectedCrewId = crew.id;
                         _selectionConfirmed = false;
                       }),
+                      onChangeDate: _pickDate,
                       onConfirm: selectedCrew == null
                           ? null
                           : () => setState(() => _selectionConfirmed = true),
