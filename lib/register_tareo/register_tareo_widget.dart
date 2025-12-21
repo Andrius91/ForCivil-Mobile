@@ -35,6 +35,7 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
   bool _isSubmittingTareo = false;
   String? _submitError;
   bool _selectionConfirmed = false;
+  int _currentStep = 0;
 
   @override
   void didChangeDependencies() {
@@ -398,41 +399,126 @@ class _RegisterTareoWidgetState extends State<RegisterTareoWidget> {
                           _filterPhasesForCrew(data.phases, crew);
                   final crewPending = _pendingEntries[crew.id] ?? const [];
 
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final phasePanel = _PhasePanel(
-                        phases: filteredPhases,
-                        onAssign: (partida) => _openAssignment(partida, crew),
-                      );
-                      final crewHeader = _SelectedCrewHeader(
-                        crew: crew,
-                        onChange: () => setState(() {
-                          _selectedCrewId = null;
-                          _selectionConfirmed = false;
-                        }),
-                      );
+                  final phasePanel = _PhasePanel(
+                    phases: filteredPhases,
+                    onAssign: (partida) => _openAssignment(partida, crew),
+                  );
+                  final crewHeader = _SelectedCrewHeader(
+                    crew: crew,
+                    onChange: () => setState(() {
+                      _selectedCrewId = null;
+                      _selectionConfirmed = false;
+                      _currentStep = 0;
+                    }),
+                  );
 
-                      return Column(
-                        children: [
-                          dateSelector,
-                          const SizedBox(height: 12.0),
-                          crewHeader,
-                          if (crewPending.isNotEmpty) ...[
-                            const SizedBox(height: 12.0),
-                            _PendingEntriesSummary(
-                              entries: crewPending,
-                              date: _selectedDate,
-                              isSubmitting: _isSubmittingTareo,
-                              errorMessage: _submitError,
-                              onSubmit: () => _submitPendingEntries(crew),
-                              onView: () => _showPendingDetail(crew),
-                            ),
-                          ],
-                          const SizedBox(height: 12.0),
-                          Expanded(child: phasePanel),
-                        ],
-                      );
-                    },
+                  return ListView(
+                    padding: const EdgeInsets.only(bottom: 32.0),
+                    children: [
+                      _WizardStepCard(
+                        stepNumber: 1,
+                        title: 'Configura tu tareo',
+                        description:
+                            'Elige la cuadrilla y la fecha de trabajo para este registro.',
+                        status: _selectionConfirmed
+                            ? WizardStepStatus.completed
+                            : WizardStepStatus.active,
+                        onTap: () => setState(() {
+                          _currentStep = 0;
+                        }),
+                        child: _selectionConfirmed && selectedCrew != null
+                            ? _SelectionOverview(
+                                date: _selectedDate,
+                                crew: selectedCrew!,
+                                onEdit: () => setState(() {
+                                  _selectionConfirmed = false;
+                                  _currentStep = 0;
+                                }),
+                                onChangeDate: _pickDate,
+                              )
+                            : _InitialSelectionStep(
+                                date: _selectedDate,
+                                crews: crews,
+                                selectedCrew: selectedCrew,
+                                onSelectCrew: (crew) => setState(() {
+                                  _selectedCrewId = crew.id;
+                                }),
+                                onChangeDate: _pickDate,
+                                onConfirm: selectedCrew == null
+                                    ? null
+                                    : () => setState(() {
+                                          _selectionConfirmed = true;
+                                          _currentStep = 1;
+                                        }),
+                              ),
+                      ),
+                      const SizedBox(height: 16.0),
+                      _WizardStepCard(
+                        stepNumber: 2,
+                        title: 'Captura tus horas',
+                        description:
+                            'Selecciona una partida y registra las horas correspondientes.',
+                        status: _selectionConfirmed
+                            ? WizardStepStatus.active
+                            : WizardStepStatus.disabled,
+                        child: !_selectionConfirmed
+                            ? _StepPlaceholder(
+                                message:
+                                    'Completa el paso anterior para habilitar las partidas.',
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  dateSelector,
+                                  const SizedBox(height: 12.0),
+                                  crewHeader,
+                                  if (crewPending.isNotEmpty)
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(top: 12.0),
+                                      child: _PendingEntriesSummary(
+                                        entries: crewPending,
+                                        date: _selectedDate,
+                                        isSubmitting: _isSubmittingTareo,
+                                        errorMessage: _submitError,
+                                        onSubmit: () =>
+                                            _submitPendingEntries(crew),
+                                        onView: () => _showPendingDetail(crew),
+                                      ),
+                                    ),
+                                  const SizedBox(height: 16.0),
+                                  SizedBox(
+                                    height: 520,
+                                    child: phasePanel,
+                                  ),
+                                ],
+                              ),
+                      ),
+                      const SizedBox(height: 16.0),
+                      _WizardStepCard(
+                        stepNumber: 3,
+                        title: 'Revisa y envía',
+                        description:
+                            'Consulta el resumen del tareo antes de enviarlo.',
+                        status: (_pendingEntries[crew.id] ?? const []).isNotEmpty
+                            ? WizardStepStatus.active
+                            : WizardStepStatus.disabled,
+                        child: (_pendingEntries[crew.id] ?? const []).isEmpty
+                            ? _StepPlaceholder(
+                                message:
+                                    'Aún no has registrado horas en borrador.',
+                              )
+                            : _PendingEntriesDetail(
+                                entries: _pendingEntries[crew.id]!,
+                                date: _selectedDate,
+                                isSubmitting: _isSubmittingTareo,
+                                errorMessage: _submitError,
+                                onSubmit: () =>
+                                    _submitPendingEntries(crew),
+                                onClear: () => _clearPending(crew.id),
+                              ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -668,25 +754,28 @@ class _DateSelector extends StatelessWidget {
 
 class _InitialSelectionStep extends StatelessWidget {
   const _InitialSelectionStep({
-    required this.dateSelector,
+    required this.date,
     required this.crews,
     required this.selectedCrew,
     required this.onSelectCrew,
+    required this.onChangeDate,
     required this.onConfirm,
   });
 
-  final Widget dateSelector;
+  final DateTime date;
   final List<Crew> crews;
   final Crew? selectedCrew;
   final ValueChanged<Crew> onSelectCrew;
+  final VoidCallback onChangeDate;
   final VoidCallback? onConfirm;
 
   @override
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        dateSelector,
+        _DateSelector(date: date, onTap: onChangeDate),
         const SizedBox(height: 12.0),
         if (selectedCrew != null)
           Container(
@@ -729,7 +818,8 @@ class _InitialSelectionStep extends StatelessWidget {
               style: theme.bodyMedium,
             ),
           ),
-        Expanded(
+        SizedBox(
+          height: 280,
           child: _CrewSelectionView(
             crews: crews,
             selectedCrewId: selectedCrew?.id,
@@ -864,6 +954,174 @@ class _SelectedCrewHeader extends StatelessWidget {
             label: const Text('Cambiar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SelectionOverview extends StatelessWidget {
+  const _SelectionOverview({
+    required this.date,
+    required this.crew,
+    required this.onEdit,
+    required this.onChangeDate,
+  });
+
+  final DateTime date;
+  final Crew crew;
+  final VoidCallback onEdit;
+  final VoidCallback onChangeDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DateSelector(date: date, onTap: onChangeDate),
+        const SizedBox(height: 8.0),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: theme.card,
+            borderRadius: BorderRadius.circular(18.0),
+            border: Border.all(color: theme.border),
+          ),
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(crew.name, style: theme.titleMedium),
+                    Text(
+                      'Integrantes: ${crew.members.length}\nCapataz: ${crew.foremanName}',
+                      style: theme.bodySmall.override(
+                        font: GoogleFonts.inter(),
+                        color: theme.mutedforeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar'),
+              )
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StepPlaceholder extends StatelessWidget {
+  const _StepPlaceholder({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24.0),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(16.0),
+        border: Border.all(color: theme.border),
+      ),
+      child: Text(
+        message,
+        style: theme.bodyMedium,
+      ),
+    );
+  }
+}
+
+enum WizardStepStatus { active, completed, disabled }
+
+class _WizardStepCard extends StatelessWidget {
+  const _WizardStepCard({
+    required this.stepNumber,
+    required this.title,
+    required this.description,
+    required this.child,
+    this.status = WizardStepStatus.active,
+    this.onTap,
+  });
+
+  final int stepNumber;
+  final String title;
+  final String description;
+  final Widget child;
+  final WizardStepStatus status;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final isDisabled = status == WizardStepStatus.disabled;
+    final headerColor = isDisabled
+        ? theme.mutedforeground
+        : status == WizardStepStatus.completed
+            ? theme.success
+            : theme.primaryText;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(20.0),
+          border: Border.all(color: theme.border),
+        ),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: headerColor.withOpacity(0.15),
+                  child: Text(
+                    stepNumber.toString(),
+                    style: theme.labelLarge.override(color: headerColor),
+                  ),
+                ),
+                const SizedBox(width: 12.0),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.titleMedium.override(color: headerColor),
+                      ),
+                      Text(
+                        description,
+                        style: theme.bodySmall.override(
+                          font: GoogleFonts.inter(),
+                          color: theme.mutedforeground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16.0),
+            Opacity(
+              opacity: isDisabled ? 0.6 : 1,
+              child: child,
+            ),
+          ],
+        ),
       ),
     );
   }
