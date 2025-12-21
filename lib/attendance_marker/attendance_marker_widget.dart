@@ -453,18 +453,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     );
   }
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(color: theme.border),
-      ),
-      padding: const EdgeInsets.all(16.0),
-      child: child,
-    );
-  }
-
   Color _modeColor(String mode, FlutterFlowTheme theme) {
     return mode == 'INGRESO' ? theme.success : const Color(0xFFF28A2E);
   }
