@@ -442,7 +442,7 @@ ImageProvider? _memberPhotoProvider(BuildContext context, int personId) {
   if (token == null) {
     return null;
   }
-  final url = 'https://api.codepass.lat/persons/$personId/photo';
+  final url = 'https://api.forcivil.com/persons/$personId/photo';
   return CachedNetworkImageProvider(url, headers: {
     'Authorization': 'Bearer $token',
   });

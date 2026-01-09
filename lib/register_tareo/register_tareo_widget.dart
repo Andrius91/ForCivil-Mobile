@@ -1365,41 +1365,71 @@ class _HoursStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FlutterFlowTheme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+      padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 16.0),
       decoration: BoxDecoration(
         color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(12.0),
+        borderRadius: BorderRadius.circular(18.0),
         border: Border.all(color: theme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: theme.labelLarge,
-          ),
-          const SizedBox(height: 8.0),
-          Row(
-            children: [
-              IconButton(
-                onPressed: enabled
-                    ? () => onChanged(_decrement(value))
-                    : null,
-                icon: const Icon(Icons.remove_circle_outline),
-              ),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    value.toStringAsFixed(value % 1 == 0 ? 0 : 1),
-                    style: theme.headlineSmall,
+          GestureDetector(
+            onTap: enabled ? () => _openNumberPad(context) : null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: theme.labelMedium.override(
+                          font: GoogleFonts.interTight(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4.0),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _formatValue(value),
+                          style: theme.displaySmall,
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      ),
+                      const SizedBox(height: 4.0),
+                      Text(
+                        'Disponible: ${maxValue.toStringAsFixed(1)} h',
+                        style: theme.bodySmall.override(
+                          font: GoogleFonts.inter(color: theme.mutedforeground),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14.0),
+          Row(
+            children: [
+              Expanded(
+                child: _StepperActionButton(
+                  icon: Icons.add,
+                  onTap: enabled ? () => onChanged(_increment(value)) : null,
+                  height: 50,
+                ),
               ),
-              IconButton(
-                onPressed: enabled
-                    ? () => onChanged(_increment(value))
-                    : null,
-                icon: const Icon(Icons.add_circle_outline),
+              const SizedBox(width: 12.0),
+              Expanded(
+                child: _StepperActionButton(
+                  icon: Icons.remove,
+                  onTap: enabled ? () => onChanged(_decrement(value)) : null,
+                  height: 50,
+                ),
               ),
             ],
           ),
@@ -1408,8 +1438,409 @@ class _HoursStepper extends StatelessWidget {
     );
   }
 
+  String _formatValue(double value) =>
+      value.toStringAsFixed(value % 1 == 0 ? 0 : 1);
+
   double _increment(double current) => (current + 0.5).clamp(0, maxValue);
   double _decrement(double current) => (current - 0.5).clamp(0, maxValue);
+
+  Future<void> _openNumberPad(BuildContext context) async {
+    final theme = FlutterFlowTheme.of(context);
+    String inputValue = _formatValue(value);
+
+    final result = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final parsedValue = double.tryParse(inputValue);
+            final exceedsMax =
+                parsedValue != null && parsedValue > maxValue;
+            final isNegative = parsedValue != null && parsedValue < 0;
+            final hasInvalidNumber =
+                parsedValue == null && inputValue.isNotEmpty;
+            final isValid =
+                !hasInvalidNumber && !exceedsMax && !isNegative;
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: theme.primaryBackground,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28.0),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 24,
+                      offset: Offset(0, -4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Asignar ${label.toLowerCase()}',
+                            style: theme.titleMedium.override(
+                              font: GoogleFonts.interTight(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: Icon(Icons.close, color: theme.mutedforeground),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12.0),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 16.0),
+                        decoration: BoxDecoration(
+                          color: theme.card,
+                          borderRadius: BorderRadius.circular(16.0),
+                          border: Border.all(color: theme.border),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Horas totales',
+                              style: theme.labelMedium.override(
+                                font: GoogleFonts.inter(
+                                  color: theme.mutedforeground,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              inputValue.isEmpty ? '0' : inputValue,
+                              style: theme.displaySmall,
+                            ),
+                            const SizedBox(height: 6.0),
+                            Text(
+                              exceedsMax
+                                  ? 'Máximo ${maxValue.toStringAsFixed(1)} h'
+                                  : 'Disponible: ${maxValue.toStringAsFixed(1)} h',
+                              style: theme.bodySmall.override(
+                                font: GoogleFonts.inter(
+                                  color: exceedsMax
+                                      ? theme.error
+                                      : theme.mutedforeground,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isNegative || hasInvalidNumber)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            isNegative
+                                ? 'Ingresa un valor mayor o igual a 0'
+                                : 'Ingresa un número válido',
+                            style: theme.bodySmall.override(
+                              font: GoogleFonts.inter(color: theme.error),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 16.0),
+                      ..._buildKeyRows(theme, inputValue, (newValue) {
+                        setModalState(() => inputValue = newValue);
+                      }),
+                      const SizedBox(height: 16.0),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancelar'),
+                            ),
+                          ),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: theme.primarycolor,
+                                foregroundColor: theme.primaryforeground,
+                              ),
+                              onPressed: isValid
+                                  ? () {
+                                      final parsed =
+                                          double.tryParse(inputValue) ?? 0;
+                                      final normalized =
+                                          ((parsed * 2).round() / 2)
+                                              .clamp(0, maxValue)
+                                              .toDouble();
+                                      Navigator.of(context)
+                                          .pop(normalized);
+                                    }
+                                  : null,
+                              child: const Text('Aplicar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      onChanged(result);
+    }
+  }
+
+  List<Widget> _buildKeyRows(
+    FlutterFlowTheme theme,
+    String inputValue,
+    ValueChanged<String> onChangedValue,
+  ) {
+    final rows = [
+      ['1', '2', '3'],
+      ['4', '5', '6'],
+      ['7', '8', '9'],
+      ['.', '0', '<'],
+    ];
+    return rows
+        .map(
+          (row) => Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              children: row
+                  .map(
+                    (key) => Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: _KeyButton(
+                          label: key,
+                          theme: theme,
+                          onTap: () => onChangedValue(
+                            _handleKeyPress(key, inputValue),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  String _handleKeyPress(String key, String current) {
+    var value = current;
+    if (key == '<') {
+      if (value.isNotEmpty) {
+        value = value.substring(0, value.length - 1);
+      }
+      return value;
+    }
+    if (key == '.') {
+      if (value.contains('.')) {
+        return value;
+      }
+      if (value.isEmpty) {
+        return '0.5';
+      }
+      return '$value.5';
+    }
+    if (value.contains('.')) {
+      // Evita agregar más dígitos después de fijar el decimal .5
+      return value;
+    }
+    if (value == '0') {
+      value = key;
+    } else {
+      value += key;
+    }
+    return value;
+  }
+}
+
+class _KeyButton extends StatelessWidget {
+  const _KeyButton({
+    required this.label,
+    required this.theme,
+    required this.onTap,
+  });
+
+  final String label;
+  final FlutterFlowTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: theme.card,
+          foregroundColor: theme.primaryText,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10.0),
+            side: BorderSide(color: theme.border),
+          ),
+        ),
+        onPressed: onTap,
+        child: label == '<'
+            ? Icon(Icons.backspace_outlined, color: theme.primaryText)
+            : Text(
+                label,
+                style: theme.titleMedium,
+              ),
+      ),
+    );
+  }
+}
+
+class _StepperActionButton extends StatelessWidget {
+  const _StepperActionButton({
+    required this.icon,
+    required this.onTap,
+    this.height = 60,
+    this.width,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final double height;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return SizedBox(
+      height: height,
+      width: width ?? double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: theme.primarycolor,
+          foregroundColor: theme.primaryforeground,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          padding: EdgeInsets.zero,
+          minimumSize: Size(width ?? 60, height),
+        ),
+        onPressed: onTap,
+        child: Center(child: Icon(icon, size: 22)),
+      ),
+    );
+  }
+}
+
+class _StepperRow extends StatelessWidget {
+  const _StepperRow({
+    required this.title,
+    required this.value,
+    required this.available,
+    required this.enabled,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.onTapValue,
+  });
+
+  final String title;
+  final String value;
+  final double available;
+  final bool enabled;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+  final VoidCallback? onTapValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: onTapValue,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.labelMedium.override(
+                    font: GoogleFonts.interTight(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6.0),
+                Container(
+                  height: 58,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: theme.card,
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: Border.all(color: theme.border),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      style: theme.headlineSmall,
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6.0),
+                Text(
+                  'Disponible: ${available.toStringAsFixed(1)} h',
+                  style: theme.bodySmall.override(
+                    font: GoogleFonts.inter(color: theme.mutedforeground),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12.0),
+        Column(
+          children: [
+            _StepperActionButton(
+              icon: Icons.add,
+              onTap: enabled ? onIncrement : null,
+              height: 64,
+              width: 44,
+            ),
+            const SizedBox(height: 8.0),
+            _StepperActionButton(
+              icon: Icons.remove,
+              onTap: enabled ? onDecrement : null,
+              height: 64,
+              width: 44,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 ImageProvider? _memberPhotoProvider(BuildContext context, int personId) {
@@ -1417,7 +1848,7 @@ ImageProvider? _memberPhotoProvider(BuildContext context, int personId) {
   if (token == null) {
     return null;
   }
-  final url = 'https://api.codepass.lat/persons/$personId/photo';
+  final url = 'https://api.forcivil.com/persons/$personId/photo';
   return CachedNetworkImageProvider(url, headers: {
     'Authorization': 'Bearer $token',
   });
@@ -1493,6 +1924,7 @@ class CrewAssignmentPage extends StatefulWidget {
 class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   final Map<int, double> _normalHours = {};
   final Map<int, double> _extraHours = {};
+  final Map<int, bool> _selectedMembers = {};
   bool _submitting = false;
   String? _error;
 
@@ -1517,10 +1949,16 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
   void initState() {
     super.initState();
     for (final member in widget.crew.members) {
+      final maxNormal = _maxNormalFor(member.id);
+      final defaultNormal = widget.initialNormalHours?[member.id];
+      final defaultExtra = widget.initialExtraHours?[member.id];
       _normalHours[member.id] =
-          widget.initialNormalHours?[member.id] ?? 0;
-      _extraHours[member.id] =
-          widget.initialExtraHours?[member.id] ?? 0;
+          defaultNormal ?? (maxNormal > 0 ? maxNormal : 0);
+      _extraHours[member.id] = defaultExtra ?? 0;
+      final canAssign = _canAssignMember(member.id);
+      final hasInitial = (defaultNormal ?? 0) > 0 || (defaultExtra ?? 0) > 0;
+      final hasCapacity = maxNormal > 0 || _maxExtraFor(member.id) > 0;
+      _selectedMembers[member.id] = canAssign && (hasInitial || hasCapacity);
     }
   }
 
@@ -1533,6 +1971,10 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
     final entries = <_AssignmentLine>[];
     for (final member in widget.crew.members) {
       if (!_canAssignMember(member.id)) {
+        continue;
+      }
+      final selected = _selectedMembers[member.id] ?? false;
+      if (!selected) {
         continue;
       }
       final maxNormal = _maxNormalFor(member.id);
@@ -1668,14 +2110,34 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundImage:
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Checkbox(
+                    value: _selectedMembers[member.id] ?? false,
+                    onChanged: canAssign
+                        ? (value) => setState(() {
+                              final checked = value ?? false;
+                              _selectedMembers[member.id] = checked;
+                              if (!checked) {
+                                _normalHours[member.id] = 0;
+                                _extraHours[member.id] = 0;
+                              } else {
+                                final maxNormal = _maxNormalFor(member.id);
+                                if ((_normalHours[member.id] ?? 0) == 0 &&
+                                    maxNormal > 0) {
+                                  _normalHours[member.id] = maxNormal;
+                                }
+                              }
+                            })
+                        : null,
+                    activeColor: theme.primarycolor,
+                  ),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundImage:
                                     _memberPhotoProvider(context, member.id),
                                 child: member.photoUrl == null
                                     ? Text(
@@ -1713,29 +2175,35 @@ class _CrewAssignmentPageState extends State<CrewAssignmentPage> {
                           const SizedBox(height: 12.0),
                           Row(
                             children: [
-                              Expanded(
-                                child: _HoursStepper(
-                                  label: 'Horas normales',
-                                  value: normalValue,
-                                  enabled:
-                                      !_submitting && canAssign && normalMax > 0,
-                                  maxValue: normalMax,
-                                  onChanged: (value) => setState(() {
-                                    _normalHours[member.id] = value;
-                                  }),
-                                ),
-                              ),
+                          Expanded(
+                            child: _HoursStepper(
+                              label: 'H.N',
+                              value: normalValue,
+                              enabled:
+                                  !_submitting &&
+                                      canAssign &&
+                                      normalMax > 0 &&
+                                      (_selectedMembers[member.id] ?? false),
+                              maxValue: normalMax,
+                              onChanged: (value) => setState(() {
+                                _normalHours[member.id] = value;
+                              }),
+                            ),
+                          ),
                               const SizedBox(width: 12.0),
                               Expanded(
-                                child: _HoursStepper(
-                                  label: 'Horas extra',
-                                  value: extraValue,
-                                  enabled:
-                                      !_submitting && canAssign && extraMax > 0,
-                                  maxValue: extraMax,
-                                  onChanged: (value) => setState(() {
-                                    _extraHours[member.id] = value;
-                                  }),
+                            child: _HoursStepper(
+                              label: 'H.E',
+                              value: extraValue,
+                              enabled:
+                                  !_submitting &&
+                                      canAssign &&
+                                      extraMax > 0 &&
+                                      (_selectedMembers[member.id] ?? false),
+                              maxValue: extraMax,
+                              onChanged: (value) => setState(() {
+                                _extraHours[member.id] = value;
+                              }),
                                 ),
                               ),
                             ],

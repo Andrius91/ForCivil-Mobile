@@ -10,7 +10,7 @@ class TimesheetService {
       : _client = client ?? http.Client(),
         _baseUrl = baseUrl;
 
-  static const _defaultBaseUrl = 'https://api.codepass.lat';
+  static const _defaultBaseUrl = 'https://api.forcivil.com';
 
   final http.Client _client;
   final String _baseUrl;
