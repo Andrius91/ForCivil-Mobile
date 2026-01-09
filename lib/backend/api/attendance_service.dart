@@ -171,7 +171,8 @@ class AttendanceRecord {
       present: json['present'] as bool? ?? true,
       date: DateTime.tryParse(dateString ?? ''),
       checkInTime: _parseDateTime(dateString, json['checkInTime']?.toString()),
-      checkOutTime: _parseDateTime(dateString, json['checkOutTime']?.toString()),
+      checkOutTime:
+          _parseDateTime(dateString, json['checkOutTime']?.toString()),
       hoursNormal: _toDouble(json['hoursNormal']),
       hoursExtra: _toDouble(json['hoursExtra']),
     );

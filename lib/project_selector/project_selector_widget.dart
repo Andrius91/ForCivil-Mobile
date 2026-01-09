@@ -124,7 +124,7 @@ class _ProjectCard extends StatelessWidget {
     final theme = FlutterFlowTheme.of(context);
     return InkWell(
       borderRadius: BorderRadius.circular(20.0),
-      onTap: role.active ? onTap : null,
+      onTap: role.isActive ? onTap : null,
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
@@ -175,7 +175,7 @@ class _ProjectCard extends StatelessWidget {
                           ),
                     ),
                     Text(
-                      'Rol: ${role.roleName}',
+                      'Rol: ${role.displayRole}',
                       style: FlutterFlowTheme.of(context).bodyMedium.override(
                             font: GoogleFonts.inter(
                               fontWeight: FontWeight.normal,
@@ -194,13 +194,15 @@ class _ProjectCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'ID #${role.projectId}',
+                    role.projectCode != null
+                        ? 'Código ${role.projectCode}'
+                        : 'ID #${role.projectId}',
                     style: FlutterFlowTheme.of(context).labelMedium.override(
                           font: GoogleFonts.inter(),
                           color: theme.mutedforeground,
                         ),
                   ),
-                  if (!role.active)
+                  if (!role.isActive)
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(

@@ -61,29 +61,103 @@ class LoginResponseData {
 
 class ProjectRole {
   ProjectRole({
-    required this.membershipId,
     required this.projectId,
     required this.projectName,
-    required this.roleId,
-    required this.roleName,
-    required this.active,
-  });
+    this.membershipId,
+    this.projectCode,
+    this.roleId,
+    this.roleName,
+    this.roleDescription,
+    this.frontId,
+    this.frontName,
+    bool? active,
+  }) : active = active ?? true;
 
-  final int membershipId;
+  final int? membershipId;
   final int projectId;
   final String projectName;
-  final int roleId;
-  final String roleName;
+  final String? projectCode;
+  final int? roleId;
+  final String? roleName;
+  final String? roleDescription;
   final bool active;
+  final int? frontId;
+  final String? frontName;
+
+  String get displayRole =>
+      (roleName != null && roleName!.isNotEmpty) ? roleName! : 'Miembro';
+  bool get isActive => active;
+
+  static int? _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String && value.isNotEmpty) {
+      return int.tryParse(value);
+    }
+    return null;
+  }
+
+  static bool? _asBool(dynamic value) {
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+    if (value is String) {
+      final normalized = value.toLowerCase();
+      if (normalized == 'true') {
+        return true;
+      }
+      if (normalized == 'false') {
+        return false;
+      }
+    }
+    return null;
+  }
+
+  static String? _asString(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    final stringValue = value.toString();
+    return stringValue.trim().isEmpty ? null : stringValue;
+  }
 
   factory ProjectRole.fromJson(Map<String, dynamic> json) {
+    int? resolveProjectId() {
+      return _asInt(json['projectId']) ??
+          _asInt(json['id']) ??
+          _asInt(json['project']?['id']);
+    }
+
+    String resolveProjectName() {
+      return _asString(json['projectName']) ??
+          _asString(json['name']) ??
+          _asString(json['project']?['name']) ??
+          'Proyecto';
+    }
+
+    final resolvedProjectId = resolveProjectId();
+    if (resolvedProjectId == null) {
+      throw ApiException('Proyecto inválido en la sesión del usuario');
+    }
+
     return ProjectRole(
-      membershipId: json['membershipId'] as int,
-      projectId: json['projectId'] as int,
-      projectName: json['projectName'] as String,
-      roleId: json['roleId'] as int,
-      roleName: json['roleName'] as String,
-      active: json['active'] as bool,
+      membershipId: _asInt(json['membershipId'] ?? json['assignmentId']),
+      projectId: resolvedProjectId,
+      projectName: resolveProjectName(),
+      projectCode: _asString(json['projectCode'] ?? json['code']),
+      roleId: _asInt(json['roleId']),
+      roleName: _asString(json['roleName'] ?? json['role']),
+      roleDescription: _asString(json['roleDescription']),
+      frontId: _asInt(json['frontId']),
+      frontName: _asString(json['frontName']),
+      active: _asBool(json['active']) ?? true,
     );
   }
 }
@@ -110,10 +184,25 @@ class UserProfile {
   final List<ProjectRole> projectRoles;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
-    final roles = (json['projectRoles'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .map(ProjectRole.fromJson)
-        .toList();
+    List<ProjectRole> parseRoles() {
+      final rawRoles = json['projectRoles'];
+      if (rawRoles is List) {
+        return rawRoles
+            .whereType<Map<String, dynamic>>()
+            .map(ProjectRole.fromJson)
+            .toList();
+      }
+      final rawProjects = json['projects'];
+      if (rawProjects is List) {
+        return rawProjects
+            .whereType<Map<String, dynamic>>()
+            .map(ProjectRole.fromJson)
+            .toList();
+      }
+      return const [];
+    }
+
+    final roles = parseRoles();
     return UserProfile(
       id: json['id'] as int,
       companyId: json['companyId'] as int,

@@ -43,59 +43,66 @@ class ProjectService {
 }
 
 class ProjectDetail {
-  ProjectDetail({
-    required this.id,
-    this.mondayHourLimit,
-    this.tuesdayHourLimit,
-    this.wednesdayHourLimit,
-    this.thursdayHourLimit,
-    this.fridayHourLimit,
-    this.saturdayHourLimit,
-    this.sundayHourLimit,
-  });
+  ProjectDetail({required this.id, required Map<int, double?> hourLimits})
+      : _hourLimits = hourLimits;
 
   final int id;
-  final double? mondayHourLimit;
-  final double? tuesdayHourLimit;
-  final double? wednesdayHourLimit;
-  final double? thursdayHourLimit;
-  final double? fridayHourLimit;
-  final double? saturdayHourLimit;
-  final double? sundayHourLimit;
+  final Map<int, double?> _hourLimits;
+
+  static const Map<String, int> _weekdayKeys = {
+    'monday': DateTime.monday,
+    'tuesday': DateTime.tuesday,
+    'wednesday': DateTime.wednesday,
+    'thursday': DateTime.thursday,
+    'friday': DateTime.friday,
+    'saturday': DateTime.saturday,
+    'sunday': DateTime.sunday,
+  };
 
   factory ProjectDetail.fromJson(Map<String, dynamic> json) {
-    double? _double(dynamic value) =>
-        value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
+    double? parseDouble(dynamic value) {
+      if (value is num) {
+        return value.toDouble();
+      }
+      if (value is String && value.isNotEmpty) {
+        return double.tryParse(value);
+      }
+      return null;
+    }
+
+    final limits = <int, double?>{};
+    void addLimit(int weekday, dynamic value) {
+      final parsed = parseDouble(value);
+      if (parsed != null) {
+        limits[weekday] = parsed;
+      }
+    }
+
+    final hourLimits = json['hourLimits'];
+    if (hourLimits is Map) {
+      hourLimits.forEach((key, value) {
+        final weekday = _weekdayKeys[key.toString().toLowerCase()];
+        if (weekday != null) {
+          addLimit(weekday, value);
+        }
+      });
+    } else {
+      addLimit(DateTime.monday, json['mondayHourLimit']);
+      addLimit(DateTime.tuesday, json['tuesdayHourLimit']);
+      addLimit(DateTime.wednesday, json['wednesdayHourLimit']);
+      addLimit(DateTime.thursday, json['thursdayHourLimit']);
+      addLimit(DateTime.friday, json['fridayHourLimit']);
+      addLimit(DateTime.saturday, json['saturdayHourLimit']);
+      addLimit(DateTime.sunday, json['sundayHourLimit']);
+    }
+
     return ProjectDetail(
       id: json['id'] as int,
-      mondayHourLimit: _double(json['mondayHourLimit']),
-      tuesdayHourLimit: _double(json['tuesdayHourLimit']),
-      wednesdayHourLimit: _double(json['wednesdayHourLimit']),
-      thursdayHourLimit: _double(json['thursdayHourLimit']),
-      fridayHourLimit: _double(json['fridayHourLimit']),
-      saturdayHourLimit: _double(json['saturdayHourLimit']),
-      sundayHourLimit: _double(json['sundayHourLimit']),
+      hourLimits: limits,
     );
   }
 
-  double? limitForDate(DateTime date) {
-    switch (date.weekday) {
-      case DateTime.monday:
-        return mondayHourLimit;
-      case DateTime.tuesday:
-        return tuesdayHourLimit;
-      case DateTime.wednesday:
-        return wednesdayHourLimit;
-      case DateTime.thursday:
-        return thursdayHourLimit;
-      case DateTime.friday:
-        return fridayHourLimit;
-      case DateTime.saturday:
-        return saturdayHourLimit;
-      case DateTime.sunday:
-        return sundayHourLimit;
-      default:
-        return null;
-    }
-  }
+  double? limitForDate(DateTime date) => _hourLimits[date.weekday];
+
+  double? limitForWeekday(int weekday) => _hourLimits[weekday];
 }
