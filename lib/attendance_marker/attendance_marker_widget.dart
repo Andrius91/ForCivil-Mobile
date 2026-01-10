@@ -453,11 +453,13 @@ class _ScannerPageState extends State<_ScannerPage> {
   }
 
   Future<void> _playHaptics() async {
-    await HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 120));
-    await HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 120));
-    await HapticFeedback.heavyImpact();
+    for (var i = 0; i < 3; i++) {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+      if (i < 2) {
+        await Future.delayed(const Duration(milliseconds: 180));
+      }
+    }
   }
 
   void _showScanMessage(String message) {
