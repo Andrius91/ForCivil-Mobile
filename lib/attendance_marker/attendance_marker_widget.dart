@@ -420,7 +420,7 @@ class _ScannerPageState extends State<_ScannerPage> {
       _handled = false;
       return;
     }
-    HapticFeedback.mediumImpact();
+    HapticFeedback.heavyImpact();
     _player.play(
       android: AndroidSounds.notification,
       ios: IosSounds.glass,
