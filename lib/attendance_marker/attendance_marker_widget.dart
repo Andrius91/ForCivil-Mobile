@@ -12,7 +12,6 @@ import 'package:provider/provider.dart';
 import '/backend/api/attendance_service.dart';
 import '/backend/api/auth_service.dart';
 import '/backend/api/auth_state.dart';
-import '/backend/api/crew_service.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/widgets/for_civil_layout.dart';
 
@@ -28,17 +27,12 @@ class AttendanceMarkerWidget extends StatefulWidget {
 
 class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   final AttendanceService _attendanceService = AttendanceService();
-  final CrewService _crewService = CrewService();
 
   late DateTime _now;
   Timer? _timer;
   String _mode = 'INGRESO';
   String? _message;
-  bool _dataInitialized = false;
-  bool _isLoadingData = false;
-  String? _loadError;
-  Crew? _selectedCrew;
-  List<AttendanceRecord> _records = [];
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -49,67 +43,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         _now = DateTime.now();
       });
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_dataInitialized) {
-      _dataInitialized = true;
-      _loadCrewAndRecords();
-    }
-  }
-
-  Future<void> _loadCrewAndRecords() async {
-    final currentDate = DateTime.now();
-    setState(() {
-      _isLoadingData = true;
-      _loadError = null;
-    });
-    try {
-      final authState = context.read<AuthState>();
-      await authState.ensureValidToken();
-      final token = authState.token;
-      final profile = authState.profile;
-      final project = authState.selectedProject;
-
-      if (token == null || profile == null || project == null) {
-        throw ApiException(
-            'Inicia sesión y selecciona un proyecto para usar el marcador');
-      }
-
-      final crews = await _crewService.fetchCrews(
-        userId: profile.id,
-        projectId: project.projectId,
-        token: token,
-      );
-
-      if (crews.isEmpty) {
-        throw ApiException('No se encontraron cuadrillas disponibles');
-      }
-
-      final crew = crews.first;
-      final records = await _attendanceService.fetchCrewAttendance(
-        token: token,
-        projectId: project.projectId,
-        crewId: crew.id,
-        date: currentDate,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _selectedCrew = crew;
-        _records = records;
-      });
-    } on ApiException catch (e) {
-      setState(() => _loadError = e.message);
-    } catch (_) {
-      setState(() => _loadError = 'No se pudo cargar la asistencia.');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingData = false);
-      }
-    }
   }
 
   @override
@@ -126,14 +59,19 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
   }
 
   Future<void> _startScan(String mode) async {
-    if (_selectedCrew == null || _isLoadingData) {
-      _showMessage('Aún no hay una cuadrilla disponible para registrar.');
+    final authState = context.read<AuthState>();
+    if (authState.selectedProject == null) {
+      _showMessage('Selecciona un proyecto para registrar asistencia.');
+      return;
+    }
+    if (_isProcessing) {
       return;
     }
 
     setState(() {
       _mode = mode;
       _message = null;
+      _isProcessing = true;
     });
 
     await Navigator.of(context).push(
@@ -144,6 +82,12 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         ),
       ),
     );
+
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
   }
 
   Future<bool> _handleScan(String mode, String payload) async {
@@ -152,12 +96,11 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       _showMessage('No se leyó un DNI válido en el código escaneado.');
       return false;
     }
-    final crew = _selectedCrew;
     final authState = context.read<AuthState>();
     final token = authState.token;
     final project = authState.selectedProject;
 
-    if (crew == null || token == null || project == null) {
+    if (token == null || project == null) {
       _showMessage('Debes iniciar sesión nuevamente.');
       return false;
     }
@@ -174,7 +117,6 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         await _attendanceService.registerCheckIn(
           token: freshToken,
           projectId: project.projectId,
-          crewId: crew.id,
           dni: dni,
           timestamp: timestamp,
         );
@@ -182,25 +124,16 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
         await _attendanceService.registerCheckOut(
           token: freshToken,
           projectId: project.projectId,
-          crewId: crew.id,
           dni: dni,
           timestamp: timestamp,
         );
       }
-
-      final records = await _attendanceService.fetchCrewAttendance(
-        token: freshToken,
-        projectId: project.projectId,
-        crewId: crew.id,
-        date: timestamp,
-      );
 
       if (!mounted) {
         return true;
       }
 
       setState(() {
-        _records = records;
         final formattedTime =
             dateTimeFormat('HH:mm:ss', timestamp, locale: 'es');
         _message = '$mode registrado para DNI $dni a las $formattedTime';
@@ -237,9 +170,11 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = context.watch<AuthState>().profile;
+    final authState = context.watch<AuthState>();
+    final profile = authState.profile;
     final theme = FlutterFlowTheme.of(context);
     final fullName = profile?.fullName ?? 'Dispositivo marcador';
+    final canScan = authState.selectedProject != null && !_isProcessing;
 
     final dateString = dateTimeFormat('EEEE, d MMMM y', _now, locale: 'es');
     final timeString = dateTimeFormat('HH:mm:ss', _now, locale: 'es');
@@ -249,6 +184,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
       dateString: dateString,
       timeString: timeString,
       fullName: fullName,
+      canScan: canScan,
     );
 
     return ForCivilLayout(
@@ -270,11 +206,12 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     required String dateString,
     required String timeString,
     required String fullName,
+    required bool canScan,
   }) {
     return [
       _buildDateCard(theme, dateString, timeString, fullName),
       const SizedBox(height: 16.0),
-      _buildActionButtons(theme),
+      _buildActionButtons(theme, canScan: canScan),
       if (_message != null) ...[
         const SizedBox(height: 12.0),
         _buildMessageBanner(theme),
@@ -340,8 +277,7 @@ class _AttendanceMarkerWidgetState extends State<AttendanceMarkerWidget> {
     );
   }
 
-  Widget _buildActionButtons(FlutterFlowTheme theme) {
-    final canScan = !_isLoadingData && _selectedCrew != null;
+  Widget _buildActionButtons(FlutterFlowTheme theme, {required bool canScan}) {
     return Column(
       children: [
         ElevatedButton(
@@ -485,7 +421,13 @@ class _ScannerPageState extends State<_ScannerPage> {
       return;
     }
     HapticFeedback.mediumImpact();
-    _playSound();
+    _player.play(
+      android: AndroidSounds.notification,
+      ios: IosSounds.glass,
+      volume: 0.7,
+      looping: false,
+      asAlarm: false,
+    );
     setState(() {
       _showSuccess = true;
     });
@@ -498,26 +440,6 @@ class _ScannerPageState extends State<_ScannerPage> {
         _handled = false;
       });
     });
-  }
-
-  void _playSound() {
-    if (widget.mode == 'INGRESO') {
-      _player.play(
-        android: AndroidSounds.notification,
-        ios: IosSounds.glass,
-        volume: 0.8,
-        looping: false,
-        asAlarm: false,
-      );
-    } else {
-      _player.play(
-        android: AndroidSounds.alarm,
-        ios: IosSounds.alarm,
-        volume: 0.8,
-        looping: false,
-        asAlarm: true,
-      );
-    }
   }
 
   String? _payloadFromCapture(BarcodeCapture capture) {

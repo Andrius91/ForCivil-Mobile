@@ -58,7 +58,6 @@ class AttendanceService {
   Future<AttendanceRecord> registerCheckIn({
     required String token,
     required int projectId,
-    required int crewId,
     required String dni,
     required DateTime timestamp,
   }) async {
@@ -66,10 +65,9 @@ class AttendanceService {
     final timeString = _timeFormat.format(timestamp);
     return _postAttendance(
       token: token,
+      projectId: projectId,
       path: '/attendance/check-in',
       payload: {
-        'projectId': projectId,
-        'crewId': crewId,
         'dni': dni,
         'date': dateString,
         'checkInTime': timeString,
@@ -80,7 +78,6 @@ class AttendanceService {
   Future<AttendanceRecord> registerCheckOut({
     required String token,
     required int projectId,
-    required int crewId,
     required String dni,
     required DateTime timestamp,
   }) async {
@@ -88,10 +85,9 @@ class AttendanceService {
     final timeString = _timeFormat.format(timestamp);
     return _postAttendance(
       token: token,
+      projectId: projectId,
       path: '/attendance/check-out',
       payload: {
-        'projectId': projectId,
-        'crewId': crewId,
         'dni': dni,
         'date': dateString,
         'checkOutTime': timeString,
@@ -101,6 +97,7 @@ class AttendanceService {
 
   Future<AttendanceRecord> _postAttendance({
     required String token,
+    required int projectId,
     required String path,
     required Map<String, dynamic> payload,
   }) async {
@@ -110,6 +107,7 @@ class AttendanceService {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'X-Project-Id': projectId.toString(),
       },
       body: jsonEncode(payload),
     );
