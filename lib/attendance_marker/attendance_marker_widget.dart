@@ -420,7 +420,7 @@ class _ScannerPageState extends State<_ScannerPage> {
       _handled = false;
       return;
     }
-    HapticFeedback.heavyImpact();
+    _playHaptics();
     _player.play(
       android: AndroidSounds.notification,
       ios: IosSounds.glass,
@@ -450,6 +450,14 @@ class _ScannerPageState extends State<_ScannerPage> {
       }
     }
     return null;
+  }
+
+  Future<void> _playHaptics() async {
+    await HapticFeedback.heavyImpact();
+    await Future.delayed(const Duration(milliseconds: 120));
+    await HapticFeedback.heavyImpact();
+    await Future.delayed(const Duration(milliseconds: 120));
+    await HapticFeedback.heavyImpact();
   }
 
   void _showScanMessage(String message) {
