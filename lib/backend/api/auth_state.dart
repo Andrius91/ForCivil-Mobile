@@ -51,7 +51,8 @@ class AuthState extends ChangeNotifier {
 
   Future<void> login(String usernameOrEmail, String password) async {
     final loginData = await _service.login(
-        LoginPayload(usernameOrEmail: usernameOrEmail, password: password));
+      LoginPayload(usernameOrEmail: usernameOrEmail, password: password),
+    );
 
     await _persistSession(loginData);
 
