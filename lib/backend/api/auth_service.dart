@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_config.dart';
+
 class ApiException implements Exception {
   ApiException(this.message, {this.statusCode});
 
@@ -217,16 +219,14 @@ class UserProfile {
 }
 
 class AuthService {
-  AuthService({http.Client? client, String baseUrl = _defaultBaseUrl})
+  AuthService({http.Client? client, ApiConfig? config})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
-
-  static const _defaultBaseUrl = 'https://api.forcivil.com';
+        _config = config ?? ApiConfig.instance;
 
   final http.Client _client;
-  final String _baseUrl;
+  final ApiConfig _config;
 
-  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+  Uri _uri(String path) => _config.uri(path);
 
   Future<LoginResponseData> login(LoginPayload payload) async {
     final response = await _client.post(

@@ -3,18 +3,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'auth_service.dart' show ApiException;
+import 'api_config.dart';
 
 class PlanService {
-  PlanService({http.Client? client, String baseUrl = _defaultBaseUrl})
+  PlanService({http.Client? client, ApiConfig? config})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
-
-  static const _defaultBaseUrl = 'https://api.forcivil.com';
+        _config = config ?? ApiConfig.instance;
 
   final http.Client _client;
-  final String _baseUrl;
+  final ApiConfig _config;
 
-  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+  Uri _uri(String path) => _config.uri(path);
 
   Future<List<PlanPhase>> fetchStructure({
     required String token,
@@ -62,14 +61,13 @@ class PlanPhase {
   final List<PlanPartida> partidas;
 
   factory PlanPhase.fromJson(Map<String, dynamic> json) {
-    List<Map<String, dynamic>> _mapList(dynamic data) =>
-        data is List<dynamic>
-            ? data.whereType<Map<String, dynamic>>().toList()
-            : const [];
+    List<Map<String, dynamic>> mapList(dynamic data) => data is List<dynamic>
+        ? data.whereType<Map<String, dynamic>>().toList()
+        : const [];
 
     final partidasJson = <Map<String, dynamic>>[
-      ..._mapList(json['partidas']),
-      ..._mapList(json['children']),
+      ...mapList(json['partidas']),
+      ...mapList(json['children']),
     ];
     return PlanPhase(
       phaseId: json['phaseId'] as int? ?? json['id'] as int? ?? 0,
@@ -102,14 +100,13 @@ class PlanPartida {
   final bool leaf;
 
   factory PlanPartida.fromJson(Map<String, dynamic> json) {
-    List<Map<String, dynamic>> _mapList(dynamic data) =>
-        data is List<dynamic>
-            ? data.whereType<Map<String, dynamic>>().toList()
-            : const [];
+    List<Map<String, dynamic>> mapList(dynamic data) => data is List<dynamic>
+        ? data.whereType<Map<String, dynamic>>().toList()
+        : const [];
 
     final childNodes = <Map<String, dynamic>>[
-      ..._mapList(json['children']),
-      ..._mapList(json['partidas']),
+      ...mapList(json['children']),
+      ...mapList(json['partidas']),
     ];
 
     final dynamic idValue = json['id'] ?? json['partidaId'];
@@ -119,7 +116,9 @@ class PlanPartida {
     final metricValue = json['metric'] ?? json['plannedHh'];
 
     return PlanPartida(
-      id: (idValue is int) ? idValue : int.tryParse(idValue?.toString() ?? '0') ?? 0,
+      id: (idValue is int)
+          ? idValue
+          : int.tryParse(idValue?.toString() ?? '0') ?? 0,
       code: codeValue?.toString() ?? '',
       name: nameValue?.toString() ?? '',
       unit: unitValue?.toString(),

@@ -4,20 +4,19 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import 'auth_service.dart' show ApiException;
+import 'api_config.dart';
 
 class AttendanceService {
-  AttendanceService({http.Client? client, String baseUrl = _defaultBaseUrl})
+  AttendanceService({http.Client? client, ApiConfig? config})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
-
-  static const _defaultBaseUrl = 'https://api.forcivil.com';
+        _config = config ?? ApiConfig.instance;
 
   final http.Client _client;
-  final String _baseUrl;
+  final ApiConfig _config;
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd');
   final DateFormat _timeFormat = DateFormat('HH:mm');
 
-  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+  Uri _uri(String path) => _config.uri(path);
 
   Future<List<AttendanceRecord>> fetchCrewAttendance({
     required String token,
@@ -180,7 +179,7 @@ class AttendanceRecord {
     if (date == null || time == null || date.isEmpty || time.isEmpty) {
       return null;
     }
-    final normalized = time.length == 5 ? '${time}:00' : time;
+    final normalized = time.length == 5 ? '$time:00' : time;
     final iso = '${date}T$normalized';
     return DateTime.tryParse(iso);
   }

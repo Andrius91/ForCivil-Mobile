@@ -1,18 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../auth/session_storage.dart';
 import 'auth_service.dart';
 
 class AuthState extends ChangeNotifier {
-  AuthState({AuthService? service}) : _service = service ?? AuthService();
-
-  static const _tokenKey = 'auth_token';
-  static const _refreshTokenKey = 'refresh_token';
-  static const _tokenExpiryKey = 'auth_token_expiry';
+  AuthState({AuthService? service, SessionStorage? storage})
+      : _service = service ?? AuthService(),
+        _storage = storage ?? SecureSessionStorage();
 
   final AuthService _service;
+  final SessionStorage _storage;
 
   String? _token;
   String? _refreshToken;
@@ -27,17 +25,14 @@ class AuthState extends ChangeNotifier {
   bool get isAuthenticated => _token != null && _profile != null;
 
   Future<void> restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedToken = prefs.getString(_tokenKey);
-    final savedRefresh = prefs.getString(_refreshTokenKey);
-    final expiryString = prefs.getString(_tokenExpiryKey);
-    if (savedToken == null || savedRefresh == null) {
+    final storedSession = await _storage.read();
+    if (storedSession == null) {
       return;
     }
 
-    _token = savedToken;
-    _refreshToken = savedRefresh;
-    _tokenExpiry = expiryString != null ? DateTime.tryParse(expiryString) : null;
+    _token = storedSession.token;
+    _refreshToken = storedSession.refreshToken;
+    _tokenExpiry = storedSession.expiresAt;
     try {
       await _refreshTokenIfNeeded();
       final token = _token;
@@ -71,10 +66,7 @@ class AuthState extends ChangeNotifier {
     _tokenExpiry = null;
     _profile = null;
     _selectedProject = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_refreshTokenKey);
-    await prefs.remove(_tokenExpiryKey);
+    await _storage.clear();
     notifyListeners();
   }
 
@@ -97,10 +89,13 @@ class AuthState extends ChangeNotifier {
     _token = data.token;
     _refreshToken = data.refreshToken;
     _tokenExpiry = data.expiresAt;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, data.token);
-    await prefs.setString(_refreshTokenKey, data.refreshToken);
-    await prefs.setString(_tokenExpiryKey, data.expiresAt.toIso8601String());
+    await _storage.save(
+      AuthSession(
+        token: data.token,
+        refreshToken: data.refreshToken,
+        expiresAt: data.expiresAt,
+      ),
+    );
   }
 
   Future<void> _refreshTokenIfNeeded() async {
@@ -109,7 +104,9 @@ class AuthState extends ChangeNotifier {
       return;
     }
     final threshold = DateTime.now().add(const Duration(minutes: 1));
-    if (_token != null && _tokenExpiry != null && _tokenExpiry!.isAfter(threshold)) {
+    if (_token != null &&
+        _tokenExpiry != null &&
+        _tokenExpiry!.isAfter(threshold)) {
       return;
     }
     if (_refreshCompleter != null) {

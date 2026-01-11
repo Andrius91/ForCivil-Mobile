@@ -3,18 +3,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'auth_service.dart' show ApiException;
+import 'api_config.dart';
 
 class ProjectService {
-  ProjectService({http.Client? client, String baseUrl = _defaultBaseUrl})
+  ProjectService({http.Client? client, ApiConfig? config})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
-
-  static const _defaultBaseUrl = 'https://api.forcivil.com';
+        _config = config ?? ApiConfig.instance;
 
   final http.Client _client;
-  final String _baseUrl;
+  final ApiConfig _config;
 
-  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+  Uri _uri(String path) => _config.uri(path);
 
   Future<ProjectDetail> fetchProject({
     required String token,

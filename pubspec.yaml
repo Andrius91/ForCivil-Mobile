@@ -55,6 +55,7 @@ dependencies:
   provider: 6.1.5
   mobile_scanner: 4.0.1
   flutter_ringtone_player: ^4.0.0+4
+  flutter_secure_storage: ^10.0.0
   shadcn_u_i_kit_v48jv9:
     path: ./dependencies/shadcn_u_i_kit_v48jv9 # 0.1.19
   shared_preferences: 2.5.3

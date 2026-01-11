@@ -3,19 +3,18 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'auth_service.dart' show ApiException;
+import 'api_config.dart';
 
 class CrewService {
-  CrewService({http.Client? client, String baseUrl = _defaultBaseUrl})
+  CrewService({http.Client? client, ApiConfig? config})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
-
-  static const _defaultBaseUrl = 'https://api.forcivil.com';
+        _config = config ?? ApiConfig.instance;
 
   final http.Client _client;
-  final String _baseUrl;
+  final ApiConfig _config;
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {
-    final uri = Uri.parse('$_baseUrl$path');
+    final uri = _config.uri(path);
     if (query == null || query.isEmpty) {
       return uri;
     }
@@ -52,10 +51,7 @@ class CrewService {
     }
 
     final List<dynamic> data = body['data'] as List<dynamic>? ?? [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(Crew.fromJson)
-        .toList();
+    return data.whereType<Map<String, dynamic>>().map(Crew.fromJson).toList();
   }
 }
 
